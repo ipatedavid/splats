@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="robots" content="noindex" />
+        <title>Scene editor</title>
+        <link rel="stylesheet" href="./index.css" />
+        <link rel="stylesheet" href="./edit.css" />
+        <script src="./config.js"></script>
+    </head>
+    <body>
+        <div id="stage"></div>
+        <aside id="panel" aria-label="Scene editor">
+            <header>
+                <h1 id="title">Scene editor</h1>
+                <p class="hint">
+                    Changes here only make files for you to upload. Nothing on the hosting changes until
+                    you upload them.
+                </p>
+                <p id="pose" class="readout" aria-live="off"></p>
+            </header>
+
+            <section>
+                <h2>Visitors get</h2>
+                <div class="segmented" role="radiogroup" aria-label="Camera mode for visitors">
+                    <label><input type="radio" name="mode" value="orbit" /> Orbit</label>
+                    <label><input type="radio" name="mode" value="walk" /> Walk</label>
+                    <label><input type="radio" name="mode" value="" /> Free</label>
+                </div>
+                <p class="hint" id="mode-hint"></p>
+            </section>
+
+            <section id="orbit-tools" hidden>
+                <h2>Orbit limits</h2>
+                <p class="hint">Move the view to the edge you want, then press the matching button.</p>
+                <div class="grid">
+                    <span>Turn</span>
+                    <button data-mark="left">Left edge here</button>
+                    <button data-mark="right">Right edge here</button>
+                    <output id="out-yaw"></output>
+                    <span>Tilt</span>
+                    <button data-mark="low">Lowest here</button>
+                    <button data-mark="high">Highest here</button>
+                    <output id="out-pitch"></output>
+                    <span>Zoom</span>
+                    <button data-mark="near">Closest here</button>
+                    <button data-mark="far">Furthest here</button>
+                    <output id="out-distance"></output>
+                </div>
+                <div class="row">
+                    <label for="pan">Panning</label>
+                    <select id="pan">
+                        <option value="free">Free</option>
+                        <option value="locked">Locked</option>
+                        <option value="box">Near the current focus</option>
+                    </select>
+                    <input id="pan-margin" type="number" min="0.1" step="0.1" value="1" aria-label="Distance allowed, in metres" />
+                    <span class="unit">m</span>
+                </div>
+                <button class="quiet" id="clear-orbit">Clear orbit limits</button>
+            </section>
+
+            <section id="walk-tools" hidden>
+                <h2>Walking fence</h2>
+                <p class="hint">
+                    Walk to each corner of the area visitors may use, in order around it, and add a corner
+                    there. Three or more make a fence. Walking needs the scene's collision files.
+                </p>
+                <div class="row">
+                    <button id="add-corner">Add corner here</button>
+                    <button class="quiet" id="undo-corner">Remove last</button>
+                    <button class="quiet" id="clear-fence">Clear</button>
+                </div>
+                <output id="out-fence"></output>
+            </section>
+
+            <section>
+                <h2>Start view</h2>
+                <div class="row">
+                    <button id="start-view">Use this view</button>
+                    <label for="background">Background</label>
+                    <input id="background" type="color" />
+                </div>
+            </section>
+
+            <section>
+                <h2>Annotations</h2>
+                <button id="place">Place an annotation…</button>
+                <form id="annotation-form" hidden>
+                    <p class="hint">
+                        Move to where visitors should see it from. Saving keeps your position and aims
+                        the view at the marker.
+                    </p>
+                    <label for="ann-title">Title</label>
+                    <input id="ann-title" required maxlength="80" />
+                    <label for="ann-text">Text</label>
+                    <textarea id="ann-text" rows="3" maxlength="600"></textarea>
+                    <div class="row">
+                        <button type="submit">Save annotation</button>
+                        <button type="button" class="quiet" id="ann-cancel">Cancel</button>
+                    </div>
+                </form>
+                <ol id="annotations"></ol>
+            </section>
+
+            <section class="actions">
+                <button id="preview" aria-pressed="false">Try as a visitor</button>
+                <button id="download-limits">Download limits.json</button>
+                <button id="download-settings">Download settings.json</button>
+                <p class="hint">
+                    Upload both into this scene's folder. Visitors get the change on their next visit.
+                </p>
+                <button class="quiet" id="reset-draft">Start over from the uploaded files</button>
+                <p id="status" role="status"></p>
+            </section>
+        </aside>
+        <script type="module" src="./edit.js"></script>
+    </body>
+</html>
