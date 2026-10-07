@@ -38,26 +38,49 @@ const exists = async (url) => {
     }
 };
 
+// A pointer in scene.json may name files hosted elsewhere (a scene published on superspl.at,
+// say). Only https addresses, or paths inside the folder, are used.
+const pointer = (value, folderUrl) => {
+    if (typeof value !== 'string' || !value) {
+        return undefined;
+    }
+    const url = new URL(value, folderUrl);
+    return url.protocol === 'https:' || url.href.startsWith(folderUrl) ? url.href : undefined;
+};
+
 /**
- * Everything the viewer needs for a scene. Missing settings fall back to the viewer's
- * defaults; missing limits mean no limits; collision is used when the folder has it.
+ * Everything the viewer needs for a scene. The splat is the folder's scene.sog / scene.ply,
+ * or whatever scene.json points to. Missing settings fall back to the viewer's defaults;
+ * missing limits mean no limits; collision, skybox and poster are used when present.
  */
 export const loadScene = async (folder, defaultSettings) => {
-    const [settings, limits, sog, collision] = await Promise.all([
+    const [manifest, settings, limits] = await Promise.all([
+        fetchJson(`${folder.url}scene.json`),
         fetchJson(`${folder.url}settings.json`),
-        fetchJson(`${folder.url}limits.json`),
-        exists(`${folder.url}scene.sog`),
-        exists(`${folder.url}collision.voxel.json`)
+        fetchJson(`${folder.url}limits.json`)
     ]);
-    const contentUrl = `${folder.url}${sog ? 'scene.sog' : 'scene.ply'}`;
-    if (!sog && !(await exists(contentUrl))) {
-        throw new Error(`No scene.sog or scene.ply in ${folder.url}`);
+    const pointed = (key) => pointer(manifest?.[key], folder.url);
+    const local = async (name) => ((await exists(`${folder.url}${name}`)) ? `${folder.url}${name}` : undefined);
+
+    let contentUrl = pointed('content');
+    if (!contentUrl) {
+        contentUrl = (await local('scene.sog')) ?? (await local('scene.ply'));
     }
+    if (!contentUrl) {
+        throw new Error(`No scene.sog, scene.ply or scene.json pointer in ${folder.url}`);
+    }
+    const [collisionUrl, skyboxUrl, posterUrl] = await Promise.all([
+        pointed('collision') ?? local('collision.voxel.json'),
+        pointed('skybox') ?? local('skybox.webp'),
+        pointed('poster') ?? local('poster.webp')
+    ]);
     return {
         contentUrl,
         settings: settings ?? defaultSettings(),
         hasSettings: settings !== null,
         limits: limits ?? undefined,
-        collisionUrl: collision ? `${folder.url}collision.voxel.json` : undefined
+        collisionUrl,
+        skyboxUrl,
+        posterUrl
     };
 };

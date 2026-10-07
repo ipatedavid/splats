@@ -97,6 +97,7 @@ const startViewer = async () => {
         settings: structuredClone(draft.settings),
         contentUrl: scene.contentUrl,
         collisionUrl: scene.collisionUrl,
+        skyboxUrl: scene.skyboxUrl,
         limits,
         renderer: params.has('webgl') ? 'webgl' : 'webgpu'
     });
@@ -412,6 +413,23 @@ const wire = () => {
         setTimeout(() => URL.revokeObjectURL(link.href), 1000);
     };
     $('#download-limits').addEventListener('click', () => download('limits.json', buildLimits()));
+    // the current view as the portfolio picture: a supersampled 1600 x 1000 render, as WebP
+    $('#download-poster').addEventListener('click', async () => {
+        setStatus('Rendering the poster…');
+        const shot = await viewer.captureFrame({ width: 1600, height: 1000, supersample: 2 });
+        const bytes = Uint8ClampedArray.from(atob(shot.data), (c) => c.charCodeAt(0));
+        const canvas = document.createElement('canvas');
+        canvas.width = shot.width;
+        canvas.height = shot.height;
+        canvas.getContext('2d').putImageData(new ImageData(bytes, shot.width, shot.height), 0, 0);
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', 0.85));
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'poster.webp';
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+        setStatus('Poster saved as poster.webp.');
+    });
     $('#download-settings').addEventListener('click', () => download('settings.json', draft.settings));
     $('#reset-draft').addEventListener('click', async () => {
         draft = draftFrom(scene.limits, structuredClone(scene.settings));

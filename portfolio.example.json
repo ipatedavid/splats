@@ -1,0 +1,18 @@
+{
+  "name": "Your name",
+  "tagline": "Places and objects, captured in 3D",
+  "intro": "Gaussian splats: real places you can walk around in your browser. Pick one to open it.",
+  "links": [
+    { "label": "Instagram", "url": "https://instagram.com/" },
+    { "label": "Email", "url": "mailto:you@example.com" }
+  ],
+  "scenes": [
+    {
+      "scene": "christmas-tree",
+      "title": "Christmas tree",
+      "place": "Lobby",
+      "date": "October 2026",
+      "text": "A decorated tree in a building lobby, captured on a Fuji X-T20 with a fisheye lens."
+    }
+  ]
+}

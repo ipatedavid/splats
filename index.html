@@ -2,71 +2,42 @@
 <html lang="en">
     <head>
         <meta charset="UTF-8" />
-        <meta
-            name="viewport"
-            content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
-        />
-        <title>Splat viewer</title>
-        <link rel="stylesheet" href="./index.css" />
-        <style>
-            html,
-            body {
-                height: 100%;
-                margin: 0;
-                overflow: hidden;
-                background: #111;
-            }
-            /* A scene locked to one camera mode has no mode switch. */
-            body.gs-locked .sse-buttonGroup:has(.sse-orbitCamera),
-            body.gs-locked .sse-walkShortcut {
-                display: none !important;
-            }
-            .gs-message {
-                position: fixed;
-                inset: 0;
-                display: grid;
-                place-items: center;
-                margin: 0;
-                padding: 24px;
-                color: #d8d8d8;
-                font: 16px/1.5 system-ui, sans-serif;
-                text-align: center;
-            }
-        </style>
-        <script src="./config.js"></script>
-    </head>
-    <body>
-        <script type="module">
-            import { createViewer, defaultSettings } from './index.js';
-            import { sceneFolder, loadScene } from './scene.js';
-
-            const message = (text) => {
-                const p = document.createElement('p');
-                p.className = 'gs-message';
-                p.textContent = text;
-                document.body.append(p);
-            };
-
-            const params = new URL(location.href).searchParams;
-            const folder = sceneFolder(params);
-            if (!folder) {
-                message('No scene chosen. Add ?scene=name to the address.');
-            } else {
-                try {
-                    const scene = await loadScene(folder, defaultSettings);
-                    document.body.classList.toggle('gs-locked', Boolean(scene.limits?.mode));
-                    window.viewer = await createViewer({
-                        container: document.body,
-                        settings: scene.settings,
-                        contentUrl: scene.contentUrl,
-                        collisionUrl: scene.collisionUrl,
-                        limits: scene.limits,
-                        renderer: params.has('webgl') ? 'webgl' : 'webgpu'
-                    });
-                } catch (error) {
-                    message(`This scene could not be loaded. ${error.message}`);
-                }
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+        <title>Splats</title>
+        <script>
+            // Old links went to index.html?scene=…; the player is view.html now.
+            if (new URLSearchParams(location.search).has('scene')) {
+                location.replace(`view.html${location.search}`);
             }
         </script>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            rel="stylesheet"
+            href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap"
+        />
+        <link rel="stylesheet" href="./portfolio.css" />
+    </head>
+    <body>
+        <div class="wrap">
+            <header class="mast">
+                <p class="eyebrow">Gaussian splats · walk inside them</p>
+                <h1 id="name">Splats</h1>
+                <p id="tagline" class="tagline"></p>
+                <p id="intro" class="intro"></p>
+                <nav id="links" class="links" aria-label="Links"></nav>
+            </header>
+            <main>
+                <ul id="scenes" class="grid" aria-label="Scenes"></ul>
+                <p id="empty" class="empty" hidden></p>
+            </main>
+            <footer>
+                <p>
+                    Captured with a camera, turned into splats on rented GPUs, shown with the open-source
+                    SuperSplat viewer. Drag to look around; on a phone, use one finger to turn and two to zoom.
+                </p>
+            </footer>
+        </div>
+        <script type="module" src="./portfolio.js"></script>
     </body>
 </html>
