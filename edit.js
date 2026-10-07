@@ -460,6 +460,7 @@ const wire = () => {
     });
     $('#download-settings').addEventListener('click', () => download(`${folder.name}.settings.json`, draft.settings));
     $('#reset-draft').addEventListener('click', async () => {
+        scene = await loadScene(folder, defaultSettings);  // the site as it is now
         draft = draftFrom(scene.limits, structuredClone(scene.settings));
         saveDraft();
         render();
@@ -494,9 +495,13 @@ const draftFrom = (limits, settings) => {
         panBox: Array.isArray(orbit?.pan) ? orbit.pan : null,
         fence: limits?.walk?.fence ?? [],
         startYaw: undefined,
-        settings
+        settings,
+        base: siteVersion()
     };
 };
+
+// What the site's files were when a draft started; a draft from different files is stale.
+const siteVersion = () => JSON.stringify({ settings: scene.hasSettings ? scene.settings : null, limits: scene.limits ?? null });
 
 if (!folder) {
     $('#title').textContent = 'No scene chosen';
@@ -506,9 +511,15 @@ if (!folder) {
     try {
         scene = await loadScene(folder, defaultSettings);
         const saved = storedDraft();
-        draft = saved ?? draftFrom(scene.limits, scene.settings);
-        if (saved) {
+        if (saved && saved.base === siteVersion()) {
+            draft = saved;
             setStatus('Continuing your unsaved draft from last time.');
+        } else {
+            draft = draftFrom(scene.limits, structuredClone(scene.settings));
+            if (saved) {
+                saveDraft();
+                setStatus("The scene changed on the site since your last draft, so this starts from the site's version.");
+            }
         }
         wire();
         render();
