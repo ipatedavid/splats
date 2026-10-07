@@ -35,12 +35,36 @@ const card = (entry) => {
     img.alt = '';
     img.loading = 'lazy';
     img.decoding = 'async';
-    img.src = entry.poster ? new URL(entry.poster, location.href).href : `scenes/${entry.scene}/poster.webp`;
+    // The card picture: the entry's own poster, else the folder's poster.webp, else the
+    // poster scene.json points to (a scene published on superspl.at has one).
+    const candidates = entry.poster ? [new URL(entry.poster, location.href).href] : [`scenes/${entry.scene}/poster.webp`];
+    let pointerTried = Boolean(entry.poster);
     img.addEventListener('load', () => {
         placeholder.remove();
         poster.classList.remove('no-poster');
     });
-    img.addEventListener('error', () => img.remove());
+    img.addEventListener('error', async () => {
+        const next = candidates.shift();
+        if (next) {
+            img.src = next;
+            return;
+        }
+        if (!pointerTried) {
+            pointerTried = true;
+            try {
+                const manifest = await (await fetch(`scenes/${entry.scene}/scene.json`, { cache: 'no-cache' })).json();
+                const url = new URL(manifest.poster, location.href);
+                if (url.protocol === 'https:') {
+                    img.src = url.href;
+                    return;
+                }
+            } catch {
+                // no pointer, or no poster in it
+            }
+        }
+        img.remove();
+    });
+    img.src = candidates.shift();
     poster.append(img);
     const open = document.createElement('span');
     open.className = 'open';
