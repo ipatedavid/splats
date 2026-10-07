@@ -40,15 +40,23 @@
                 outline: 2px solid rgba(255, 255, 255, 0.5);
                 outline-offset: 1px;
             }
-            /* Walk mode: the visitor's height sets their eye level. */
+            [hidden] {
+                display: none !important;
+            }
+            /* Walk mode: the visitor's height sets their eye level. One pill: closed it shows the
+               height, open it becomes the field, the unit switch, reset and close. */
             .gs-height {
                 position: fixed;
                 top: calc(env(safe-area-inset-top, 0px) + 12px);
                 right: 12px;
                 z-index: 10;
-                display: grid;
-                justify-items: end;
-                gap: 6px;
+                display: flex;
+                align-items: center;
+                gap: 2px;
+                padding: 2px;
+                border-radius: 999px;
+                background: rgba(18, 18, 20, 0.62);
+                backdrop-filter: blur(6px);
                 font: 500 13px/1.2 system-ui, sans-serif;
                 color: #f2f2f2;
             }
@@ -57,10 +65,11 @@
                 font: inherit;
                 color: inherit;
                 border: 0;
+                background: transparent;
+                min-height: 36px;
+                min-width: 36px;
+                padding: 0 12px;
                 border-radius: 999px;
-                background: rgba(18, 18, 20, 0.62);
-                backdrop-filter: blur(6px);
-                padding: 6px 12px;
             }
             .gs-height button {
                 cursor: pointer;
@@ -68,38 +77,43 @@
             .gs-height button:hover,
             .gs-height button:focus-visible,
             .gs-height input:focus-visible {
-                background: rgba(18, 18, 20, 0.85);
-                outline: 2px solid rgba(255, 255, 255, 0.5);
-                outline-offset: 1px;
+                background: rgba(255, 255, 255, 0.14);
+                outline: none;
             }
-            .gs-height form {
-                display: grid;
-                gap: 8px;
-                padding: 12px;
-                border-radius: 12px;
-                background: rgba(18, 18, 20, 0.8);
-                backdrop-filter: blur(6px);
-            }
-            .gs-height form .row {
+            .gs-height .edit {
                 display: flex;
-                gap: 6px;
                 align-items: center;
+                gap: 2px;
             }
             .gs-height input {
-                width: 4.2em;
-                border-radius: 6px;
+                width: 3.6em;
+                padding: 0 6px;
+                text-align: right;
                 background: rgba(255, 255, 255, 0.1);
                 font-variant-numeric: tabular-nums;
+                -moz-appearance: textfield;
             }
-            .gs-height .units button[aria-pressed='true'] {
-                background: #f2f2f2;
-                color: #141414;
-            }
-            .gs-height .note {
+            .gs-height input::-webkit-inner-spin-button,
+            .gs-height input::-webkit-outer-spin-button {
+                -webkit-appearance: none;
                 margin: 0;
+            }
+            .gs-height #gs-height-ft,
+            .gs-height #gs-height-in {
+                width: 2.4em;
+            }
+            .gs-height .unit {
+                padding: 0 4px 0 2px;
                 color: #b8b8b8;
-                font-size: 12px;
-                max-width: 15em;
+            }
+            .gs-height .switch {
+                border: 1px solid rgba(255, 255, 255, 0.35);
+                min-height: 30px;
+                padding: 0 10px;
+            }
+            .gs-height .icon {
+                padding: 0;
+                font-size: 16px;
             }
             .gs-message {
                 position: fixed;
@@ -152,25 +166,18 @@
                 const box = document.createElement('div');
                 box.className = 'gs-height';
                 box.innerHTML = `
-                    <button type="button" class="toggle" aria-expanded="false"></button>
-                    <form hidden>
-                        <div class="row units" role="group" aria-label="Units">
-                            <button type="button" data-unit="cm">cm</button>
-                            <button type="button" data-unit="ft">ft</button>
-                        </div>
-                        <div class="row" data-for="cm">
-                            <input id="gs-height-cm" type="number" min="90" max="230" step="1" aria-label="Height in centimetres" /> cm
-                        </div>
-                        <div class="row" data-for="ft">
-                            <input id="gs-height-ft" type="number" min="3" max="7" step="1" aria-label="Feet" /> ft
-                            <input id="gs-height-in" type="number" min="0" max="11" step="1" aria-label="Inches" /> in
-                        </div>
-                        <p class="note">Walk at your own eye level.</p>
-                        <button type="button" class="reset">Default height</button>
-                    </form>`;
+                    <button type="button" class="toggle" aria-expanded="false" title="Walk at your own eye level"></button>
+                    <div class="edit" hidden>
+                        <span data-for="cm"><input id="gs-height-cm" type="number" inputmode="numeric" min="90" max="230" step="1" aria-label="Your height in centimetres" /><span class="unit">cm</span></span>
+                        <span data-for="ft"><input id="gs-height-ft" type="number" inputmode="numeric" min="3" max="7" step="1" aria-label="Feet" /><span class="unit">ft</span><input id="gs-height-in" type="number" inputmode="numeric" min="0" max="11" step="1" aria-label="Inches" /><span class="unit">in</span></span>
+                        <button type="button" class="switch"></button>
+                        <button type="button" class="icon reset" title="Default height" aria-label="Default height">↺</button>
+                        <button type="button" class="icon close" title="Close" aria-label="Close">✕</button>
+                    </div>`;
                 document.body.append(box);
                 const toggle = box.querySelector('.toggle');
-                const form = box.querySelector('form');
+                const edit = box.querySelector('.edit');
+                const unitSwitch = box.querySelector('.switch');
                 const cm = box.querySelector('#gs-height-cm');
                 const ft = box.querySelector('#gs-height-ft');
                 const inch = box.querySelector('#gs-height-in');
@@ -178,7 +185,7 @@
                 // typing a height must not walk the camera
                 box.addEventListener('keydown', (event) => {
                     event.stopPropagation();
-                    if (event.key === 'Escape') open(false);
+                    if (event.key === 'Escape' || event.key === 'Enter') open(false);
                 });
                 box.addEventListener('keyup', (event) => event.stopPropagation());
 
@@ -194,10 +201,9 @@
                 };
                 const show = () => {
                     toggle.textContent = label();
-                    for (const b of box.querySelectorAll('[data-unit]')) {
-                        b.setAttribute('aria-pressed', String(b.dataset.unit === unit));
-                    }
-                    for (const row of box.querySelectorAll('[data-for]')) row.hidden = row.dataset.for !== unit;
+                    unitSwitch.textContent = unit === 'cm' ? 'ft' : 'cm';
+                    unitSwitch.setAttribute('aria-label', unit === 'cm' ? 'Switch to feet' : 'Switch to centimetres');
+                    for (const part of box.querySelectorAll('[data-for]')) part.hidden = part.dataset.for !== unit;
                     const h = height ?? 1.7;
                     if (document.activeElement !== cm) cm.value = Math.round(h * 100);
                     const [f, i] = feet(h);
@@ -211,22 +217,22 @@
                     show();
                 };
                 const open = (yes) => {
-                    form.hidden = !yes;
+                    edit.hidden = !yes;
+                    toggle.hidden = yes;
                     toggle.setAttribute('aria-expanded', String(yes));
-                    if (!yes) show();
+                    show();
                 };
 
-                toggle.addEventListener('click', () => open(form.hidden));
+                toggle.addEventListener('click', () => open(true));
+                box.querySelector('.close').addEventListener('click', () => open(false));
                 document.addEventListener('pointerdown', (event) => {
-                    if (!box.contains(event.target)) open(false);
+                    if (!edit.hidden && !box.contains(event.target)) open(false);
                 });
-                for (const b of box.querySelectorAll('[data-unit]')) {
-                    b.addEventListener('click', () => {
-                        unit = b.dataset.unit;
-                        write('gs-visitor-height', { height, unit });
-                        show();
-                    });
-                }
+                unitSwitch.addEventListener('click', () => {
+                    unit = unit === 'cm' ? 'ft' : 'cm';
+                    write('gs-visitor-height', { height, unit });
+                    show();
+                });
                 const number = (input) => (input.value === '' ? NaN : Number(input.value));
                 cm.addEventListener('input', () => {
                     const v = number(cm);
@@ -240,14 +246,7 @@
                 };
                 ft.addEventListener('input', fromFeet);
                 inch.addEventListener('input', fromFeet);
-                form.addEventListener('submit', (event) => {
-                    event.preventDefault();
-                    open(false);
-                });
-                box.querySelector('.reset').addEventListener('click', () => {
-                    apply(null);
-                    open(false);
-                });
+                box.querySelector('.reset').addEventListener('click', () => apply(null));
 
                 // only offered while walking
                 const update = () => {
