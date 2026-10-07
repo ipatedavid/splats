@@ -10,6 +10,12 @@
   ],
   "scenes": [
     {
+      "scene": "playground-at-coast",
+      "title": "Playground at Coast",
+      "date": "October 2026",
+      "text": "Small playground on the 7th floor of an apartment building in Manila."
+    },
+    {
       "scene": "christmas-tree",
       "title": "Christmas tree",
       "place": "Building lobby",
