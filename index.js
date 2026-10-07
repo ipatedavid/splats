@@ -90053,6 +90053,8 @@ const wallStep = (walls, from, to, radius, velocity) => {
     return pushed;
 };
 const stepStart = new Vec3();
+/** Gaussian Studio: eyes sit about this far below the top of the head, in meters. */
+const EYE_BELOW_TOP_OF_HEAD = 0.11;
 class WalkController {
     /**
      * Gaussian Studio: ground outline visitors cannot leave, [x, z] corners in order.
@@ -90078,6 +90080,23 @@ class WalkController {
      * Camera height from the bottom of the capsule in meters
      */
     eyeHeight = 1.3;
+    /**
+     * Gaussian Studio: fit the capsule to a visitor of this height in meters, eyes a little below
+     * the top of the head. Null goes back to the defaults. Takes effect while walking, as the
+     * ground-following spring settles at the new eye level.
+     *
+     * @param height - Body height in meters, or null.
+     */
+    setBodyHeight(height) {
+        if (height === null || !Number.isFinite(height)) {
+            this.capsuleHeight = 1.5;
+            this.eyeHeight = 1.3;
+            return;
+        }
+        const head = Math.min(Math.max(height, 0.9), 2.3) - this.hoverHeight;
+        this.capsuleHeight = head;
+        this.eyeHeight = head - EYE_BELOW_TOP_OF_HEAD;
+    }
     /**
      * Gravity acceleration in m/s^2
      */
@@ -90664,6 +90683,8 @@ class CameraManager {
         };
         controllers.walk.fence = limits?.walk?.fence ?? null;
         controllers.walk.walls = limits?.walk?.walls?.filter((w) => w.length >= 4) ?? null;
+        controllers.walk.setBodyHeight(global.visitorHeight ?? null);
+        events.on('visitorHeight:changed', (height) => controllers.walk.setBodyHeight(height));
         controllers.orbit.fov = resetCamera.fov;
         controllers.fly.fov = resetCamera.fov;
         controllers.fly.collision = collision;
@@ -102497,6 +102518,10 @@ const createViewer = async (options) => {
             const collision = await collisionReady;
             const hit = collision?.queryRay(...origin, ...direction, maxDistance);
             return hit ? Math.hypot(hit.x - origin[0], hit.y - origin[1], hit.z - origin[2]) : null;
+        },
+        setVisitorHeight: (height) => {
+            global.visitorHeight = height;
+            events.fire('visitorHeight:changed', height);
         },
         showWalls: (walls) => {
             wallOverlay ??= new WallOverlay(app, camera);

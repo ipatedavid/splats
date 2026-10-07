@@ -40,6 +40,67 @@
                 outline: 2px solid rgba(255, 255, 255, 0.5);
                 outline-offset: 1px;
             }
+            /* Walk mode: the visitor's height sets their eye level. */
+            .gs-height {
+                position: fixed;
+                top: calc(env(safe-area-inset-top, 0px) + 12px);
+                right: 12px;
+                z-index: 10;
+                display: grid;
+                justify-items: end;
+                gap: 6px;
+                font: 500 13px/1.2 system-ui, sans-serif;
+                color: #f2f2f2;
+            }
+            .gs-height button,
+            .gs-height input {
+                font: inherit;
+                color: inherit;
+                border: 0;
+                border-radius: 999px;
+                background: rgba(18, 18, 20, 0.62);
+                backdrop-filter: blur(6px);
+                padding: 6px 12px;
+            }
+            .gs-height button {
+                cursor: pointer;
+            }
+            .gs-height button:hover,
+            .gs-height button:focus-visible,
+            .gs-height input:focus-visible {
+                background: rgba(18, 18, 20, 0.85);
+                outline: 2px solid rgba(255, 255, 255, 0.5);
+                outline-offset: 1px;
+            }
+            .gs-height form {
+                display: grid;
+                gap: 8px;
+                padding: 12px;
+                border-radius: 12px;
+                background: rgba(18, 18, 20, 0.8);
+                backdrop-filter: blur(6px);
+            }
+            .gs-height form .row {
+                display: flex;
+                gap: 6px;
+                align-items: center;
+            }
+            .gs-height input {
+                width: 4.2em;
+                border-radius: 6px;
+                background: rgba(255, 255, 255, 0.1);
+                font-variant-numeric: tabular-nums;
+            }
+            .gs-height .units button[aria-pressed='true'] {
+                background: #f2f2f2;
+                color: #141414;
+            }
+            .gs-height .note {
+                margin: 0;
+                color: #b8b8b8;
+                font-size: 12px;
+                max-width: 15em;
+            }
             .gs-message {
                 position: fixed;
                 inset: 0;
@@ -64,6 +125,139 @@
                 p.className = 'gs-message';
                 p.textContent = text;
                 document.body.append(p);
+            };
+
+            const read = (key) => {
+                try {
+                    return JSON.parse(localStorage.getItem(key));
+                } catch {
+                    return null;
+                }
+            };
+            const write = (key, value) => {
+                try {
+                    localStorage.setItem(key, JSON.stringify(value));
+                } catch {
+                    // private window: the height lasts for this visit only
+                }
+            };
+
+            // In walk mode visitors can give their height, so they see the scene from their own
+            // eye level. Kept in this browser, in metres; shown in cm or feet and inches.
+            const heightControl = (viewer) => {
+                const saved = read('gs-visitor-height') ?? {};
+                let height = Number.isFinite(saved.height) ? saved.height : null;
+                let unit = saved.unit === 'ft' ? 'ft' : 'cm';
+
+                const box = document.createElement('div');
+                box.className = 'gs-height';
+                box.innerHTML = `
+                    <button type="button" class="toggle" aria-expanded="false"></button>
+                    <form hidden>
+                        <div class="row units" role="group" aria-label="Units">
+                            <button type="button" data-unit="cm">cm</button>
+                            <button type="button" data-unit="ft">ft</button>
+                        </div>
+                        <div class="row" data-for="cm">
+                            <input id="gs-height-cm" type="number" min="90" max="230" step="1" aria-label="Height in centimetres" /> cm
+                        </div>
+                        <div class="row" data-for="ft">
+                            <input id="gs-height-ft" type="number" min="3" max="7" step="1" aria-label="Feet" /> ft
+                            <input id="gs-height-in" type="number" min="0" max="11" step="1" aria-label="Inches" /> in
+                        </div>
+                        <p class="note">Walk at your own eye level.</p>
+                        <button type="button" class="reset">Default height</button>
+                    </form>`;
+                document.body.append(box);
+                const toggle = box.querySelector('.toggle');
+                const form = box.querySelector('form');
+                const cm = box.querySelector('#gs-height-cm');
+                const ft = box.querySelector('#gs-height-ft');
+                const inch = box.querySelector('#gs-height-in');
+
+                // typing a height must not walk the camera
+                box.addEventListener('keydown', (event) => {
+                    event.stopPropagation();
+                    if (event.key === 'Escape') open(false);
+                });
+                box.addEventListener('keyup', (event) => event.stopPropagation());
+
+                const feet = (m) => {
+                    const inches = Math.round(m / 0.0254);
+                    return [Math.floor(inches / 12), inches % 12];
+                };
+                const label = () => {
+                    if (height === null) return 'Your height';
+                    if (unit === 'cm') return `Height ${Math.round(height * 100)} cm`;
+                    const [f, i] = feet(height);
+                    return `Height ${f}′${i}″`;
+                };
+                const show = () => {
+                    toggle.textContent = label();
+                    for (const b of box.querySelectorAll('[data-unit]')) {
+                        b.setAttribute('aria-pressed', String(b.dataset.unit === unit));
+                    }
+                    for (const row of box.querySelectorAll('[data-for]')) row.hidden = row.dataset.for !== unit;
+                    const h = height ?? 1.7;
+                    if (document.activeElement !== cm) cm.value = Math.round(h * 100);
+                    const [f, i] = feet(h);
+                    if (document.activeElement !== ft) ft.value = f;
+                    if (document.activeElement !== inch) inch.value = i;
+                };
+                const apply = (metres) => {
+                    height = metres === null ? null : Math.min(Math.max(metres, 0.9), 2.3);
+                    viewer.setVisitorHeight(height);
+                    write('gs-visitor-height', { height, unit });
+                    show();
+                };
+                const open = (yes) => {
+                    form.hidden = !yes;
+                    toggle.setAttribute('aria-expanded', String(yes));
+                    if (!yes) show();
+                };
+
+                toggle.addEventListener('click', () => open(form.hidden));
+                document.addEventListener('pointerdown', (event) => {
+                    if (!box.contains(event.target)) open(false);
+                });
+                for (const b of box.querySelectorAll('[data-unit]')) {
+                    b.addEventListener('click', () => {
+                        unit = b.dataset.unit;
+                        write('gs-visitor-height', { height, unit });
+                        show();
+                    });
+                }
+                const number = (input) => (input.value === '' ? NaN : Number(input.value));
+                cm.addEventListener('input', () => {
+                    const v = number(cm);
+                    if (v >= 90 && v <= 230) apply(v / 100);
+                });
+                const fromFeet = () => {
+                    const f = number(ft);
+                    const i = inch.value === '' ? 0 : number(inch);
+                    const m = (f * 12 + i) * 0.0254;
+                    if (Number.isFinite(m) && m >= 0.9 && m <= 2.3) apply(m);
+                };
+                ft.addEventListener('input', fromFeet);
+                inch.addEventListener('input', fromFeet);
+                form.addEventListener('submit', (event) => {
+                    event.preventDefault();
+                    open(false);
+                });
+                box.querySelector('.reset').addEventListener('click', () => {
+                    apply(null);
+                    open(false);
+                });
+
+                // only offered while walking
+                const update = () => {
+                    box.hidden = viewer.state.cameraMode !== 'walk';
+                    if (box.hidden) open(false);
+                };
+                viewer.events.on('cameraMode:changed', update);
+                if (height !== null) viewer.setVisitorHeight(height);
+                show();
+                update();
             };
 
             const params = new URL(location.href).searchParams;
@@ -93,6 +287,7 @@
                         limits: scene.limits,
                         renderer: params.has('webgl') ? 'webgl' : 'webgpu'
                     });
+                    heightControl(window.viewer);
                 } catch (error) {
                     message(`This scene could not be loaded. ${error.message}`);
                 }
