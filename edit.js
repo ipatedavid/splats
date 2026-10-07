@@ -426,7 +426,8 @@ const wire = () => {
         link.click();
         setTimeout(() => URL.revokeObjectURL(link.href), 1000);
     };
-    $('#download-limits').addEventListener('click', () => download('limits.json', buildLimits()));
+    // Named after the scene, so Publish Scene can match them to it (and never to another one).
+    $('#download-limits').addEventListener('click', () => download(`${folder.name}.limits.json`, buildLimits()));
     // the current view as the portfolio picture: a supersampled 1600 x 1000 render, as WebP
     $('#download-poster').addEventListener('click', async () => {
         setStatus('Rendering the poster…');
@@ -439,12 +440,12 @@ const wire = () => {
         const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', 0.85));
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = 'poster.webp';
+        link.download = `${folder.name}.poster.webp`;
         link.click();
         setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-        setStatus('Poster saved as poster.webp.');
+        setStatus(`Poster saved as ${folder.name}.poster.webp.`);
     });
-    $('#download-settings').addEventListener('click', () => download('settings.json', draft.settings));
+    $('#download-settings').addEventListener('click', () => download(`${folder.name}.settings.json`, draft.settings));
     $('#reset-draft').addEventListener('click', async () => {
         draft = draftFrom(scene.limits, structuredClone(scene.settings));
         saveDraft();
