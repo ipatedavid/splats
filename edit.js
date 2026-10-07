@@ -207,6 +207,18 @@ const render = () => {
         }
         list.append(item);
     });
+    // A start view that circles a point outside the zoom limits gets pushed to the limit at
+    // load, and the orbit then turns around that point instead of the subject.
+    const start = draft.settings.cameras?.[0]?.initial;
+    const zoom = limits.orbit?.distance;
+    const startDistance = start ? Math.hypot(...start.position.map((v, i) => v - start.target[i])) : 0;
+    const startOff = Boolean(limits.mode === 'orbit' && zoom && start &&
+        (startDistance < zoom[0] * 0.98 || startDistance > zoom[1] * 1.02));
+    $('#start-warning').hidden = !startOff;
+    $('#start-warning').textContent = startOff
+        ? `The start view circles a point ${round(startDistance, 1)} m away, outside the zoom limits, ` +
+          'so visitors would orbit around the wrong spot. Click the subject, then press Use this view.'
+        : '';
     $('#preview').setAttribute('aria-pressed', String(previewing));
     $('#preview').textContent = previewing ? 'Back to editing' : 'Try as a visitor';
 };
@@ -317,6 +329,8 @@ const wire = () => {
     });
 
     $('#start-view').addEventListener('click', () => {
+        // in an orbit scene the start view must circle the subject: take it from orbit mode
+        if (draft.mode === 'orbit' && !ensureOrbit()) return;
         const p = pose();
         draft.settings.cameras = [{ initial: { position: p.position, target: p.focus, fov: p.fov } }];
         draft.startYaw = p.angles[1];
