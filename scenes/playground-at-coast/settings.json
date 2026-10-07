@@ -1,65 +1,65 @@
 {
- "version": 2,
- "tonemapping": "none",
- "highPrecisionRendering": false,
- "background": {
-  "color": [
-   0,
-   0,
-   0
-  ]
- },
- "postEffectSettings": {
-  "sharpness": {
-   "enabled": false,
-   "amount": 0
+  "version": 2,
+  "tonemapping": "none",
+  "highPrecisionRendering": false,
+  "background": {
+    "color": [
+      0,
+      0,
+      0
+    ]
   },
-  "bloom": {
-   "enabled": false,
-   "intensity": 0.1,
-   "blurLevel": 2
+  "postEffectSettings": {
+    "sharpness": {
+      "enabled": false,
+      "amount": 0
+    },
+    "bloom": {
+      "enabled": false,
+      "intensity": 0.1,
+      "blurLevel": 2
+    },
+    "grading": {
+      "enabled": false,
+      "brightness": 1,
+      "contrast": 1,
+      "saturation": 1,
+      "tint": [
+        1,
+        1,
+        1
+      ]
+    },
+    "vignette": {
+      "enabled": false,
+      "intensity": 0.5,
+      "inner": 0.3,
+      "outer": 0.75,
+      "curvature": 1
+    },
+    "fringing": {
+      "enabled": false,
+      "intensity": 0.5
+    }
   },
-  "grading": {
-   "enabled": false,
-   "brightness": 1,
-   "contrast": 1,
-   "saturation": 1,
-   "tint": [
-    1,
-    1,
-    1
-   ]
-  },
-  "vignette": {
-   "enabled": false,
-   "intensity": 0.5,
-   "inner": 0.3,
-   "outer": 0.75,
-   "curvature": 1
-  },
-  "fringing": {
-   "enabled": false,
-   "intensity": 0.5
-  }
- },
- "animTracks": [],
- "cameras": [
-  {
-   "initial": {
-    "position": [
-     1.6010510921478271,
-     1.60353684425354,
-     5.528852462768555
-    ],
-    "target": [
-     0.03830493130633805,
-     0.6113912951284303,
-     -0.02335079926803818
-    ],
-    "fov": 75
-   }
-  }
- ],
- "annotations": [],
- "startMode": "default"
+  "animTracks": [],
+  "cameras": [
+    {
+      "initial": {
+        "position": [
+          1.2883913592701564,
+          1.5500000000000014,
+          5.568163881923078
+        ],
+        "target": [
+          -1.0626866389261236,
+          1.5883330185794111,
+          0.2086441046550327
+        ],
+        "fov": 90
+      }
+    }
+  ],
+  "annotations": [],
+  "startMode": "default"
 }
