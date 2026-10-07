@@ -62,10 +62,25 @@
             </section>
 
             <section id="walk-tools" hidden>
-                <h2>Walking fence</h2>
+                <h2>Walls</h2>
                 <p class="hint">
-                    Walk to each corner of the area visitors may use, in order around it, and add a corner
-                    there. Three or more make a fence. Walking needs the scene's collision files.
+                    The collision already stops visitors at buildings, planters and walls. Close the
+                    openings you don't want them to use: walk into one, face out of the area, and press
+                    Block this way. The wall reaches sideways until it meets something on each side.
+                </p>
+                <div class="row">
+                    <button id="block-way">Block this way</button>
+                    <button class="quiet" id="clear-walls">Clear walls</button>
+                </div>
+                <ol id="walls"></ol>
+                <p class="hint">
+                    Walls and the fence are off while you edit (the orange panels show where they are).
+                    Press Try as a visitor to walk into them.
+                </p>
+                <h2>Fence (simple areas)</h2>
+                <p class="hint">
+                    Or walk to each corner of the area, in order around it, and add a corner there.
+                    Three or more make a fence.
                 </p>
                 <div class="row">
                     <button id="add-corner">Add corner here</button>

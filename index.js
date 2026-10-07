@@ -86678,6 +86678,68 @@ const importSettings = (settings) => {
     return result;
 };
 
+const WALL_HEIGHT = 2;
+const WALL_THICKNESS = 0.04;
+/**
+ * Gaussian Studio: the editor's view of walk-mode walls, as see-through orange panels drawn
+ * on top of the scene (so a wall behind a planter still shows). Never used for visitors.
+ */
+class WallOverlay {
+    app;
+    layer;
+    root;
+    material;
+    constructor(app, camera) {
+        this.app = app;
+        this.layer = new Layer({
+            name: 'WallOverlay',
+            clearColorBuffer: false,
+            clearDepthBuffer: true,
+            opaqueSortMode: SORTMODE_MANUAL,
+            transparentSortMode: SORTMODE_MANUAL
+        });
+        app.scene.layers.push(this.layer);
+        camera.camera.layers = [...camera.camera.layers, this.layer.id];
+        const material = new StandardMaterial();
+        material.useLighting = false;
+        material.useSkybox = false;
+        material.useFog = false;
+        material.useTonemap = false;
+        material.diffuse = new Color(0, 0, 0);
+        material.emissive = new Color(1, 0.48, 0.12);
+        material.opacity = 0.38;
+        material.blendType = BLEND_NORMAL;
+        material.depthTest = false;
+        material.depthWrite = false;
+        material.cull = CULLFACE_NONE;
+        material.update();
+        this.material = material;
+        this.root = new Entity('Walls', app);
+        app.root.addChild(this.root);
+    }
+    set(walls) {
+        for (const child of this.root.children.slice()) {
+            child.destroy();
+        }
+        for (const { a, b, y } of walls) {
+            const dx = b[0] - a[0];
+            const dz = b[1] - a[1];
+            const length = Math.hypot(dx, dz);
+            if (!length) {
+                continue;
+            }
+            const wall = new Entity('Wall', this.app);
+            wall.addComponent('render', { type: 'box', material: this.material, layers: [this.layer.id] });
+            wall.setLocalPosition((a[0] + b[0]) / 2, y + WALL_HEIGHT / 2, (a[1] + b[1]) / 2);
+            // the box's x axis along the wall: after a yaw of t it points at (cos t, 0, -sin t)
+            wall.setLocalEulerAngles(0, (Math.atan2(-dz, dx) * 180) / Math.PI, 0);
+            wall.setLocalScale(length, WALL_HEIGHT, WALL_THICKNESS);
+            this.root.addChild(wall);
+        }
+        this.app.renderNextFrame = true;
+    }
+}
+
 var version$1 = "1.37.0";
 
 class Tooltip {
@@ -89957,11 +90019,49 @@ const fencePoint = (fence, pos) => {
     pos.z = bestZ;
     return true;
 };
+// Gaussian Studio: keep a step from going through any wall ([x1, z1, x2, z2] on the ground).
+// The point stays at least `radius` from the wall on the side it came from; only the part of
+// the move into the wall is removed, so visitors slide along it. Returns true if it pushed.
+const wallStep = (walls, from, to, radius, velocity) => {
+    let pushed = false;
+    for (const [ax, az, bx, bz] of walls) {
+        const dx = bx - ax;
+        const dz = bz - az;
+        const length = Math.hypot(dx, dz);
+        if (!length) {
+            continue;
+        }
+        const nx = -dz / length;
+        const nz = dx / length;
+        const along = ((to.x - ax) * dx + (to.z - az) * dz) / (length * length);
+        if (along < -radius / length || along > 1 + radius / length) {
+            continue; // past the wall's ends
+        }
+        const side = (from.x - ax) * nx + (from.z - az) * nz >= 0 ? 1 : -1;
+        const distance = ((to.x - ax) * nx + (to.z - az) * nz) * side;
+        if (distance < radius) {
+            to.x += nx * side * (radius - distance);
+            to.z += nz * side * (radius - distance);
+            const into = (velocity.x * nx + velocity.z * nz) * side;
+            if (into < 0) {
+                velocity.x -= nx * side * into;
+                velocity.z -= nz * side * into;
+            }
+            pushed = true;
+        }
+    }
+    return pushed;
+};
+const stepStart = new Vec3();
 class WalkController {
     /**
      * Gaussian Studio: ground outline visitors cannot leave, [x, z] corners in order.
      */
     fence = null;
+    /**
+     * Gaussian Studio: walls visitors cannot walk through, [x1, z1, x2, z2].
+     */
+    walls = null;
     /**
      * Field of view in degrees for walk mode.
      */
@@ -90152,6 +90252,7 @@ class WalkController {
         camera.fov = this.fov;
     }
     _step(dt, move) {
+        stepStart.copy(this._position);
         // engage a held attachment as soon as the capsule reaches space it fits in
         if (this._pendingCollision && this._capsuleClear(this._pendingCollision, this._position)) {
             this._collision = this._pendingCollision;
@@ -90211,6 +90312,10 @@ class WalkController {
         if (this.fence && fencePoint(this.fence, this._position)) {
             this._velocity.x = 0;
             this._velocity.z = 0;
+        }
+        // the walls: never through one; slide along it
+        if (this.walls) {
+            wallStep(this.walls, stepStart, this._position, this.capsuleRadius, this._velocity);
         }
     }
     onExit(_camera) {
@@ -90558,6 +90663,7 @@ class CameraManager {
             anim: animTrack && !limits?.mode ? new AnimController(animTrack) : null
         };
         controllers.walk.fence = limits?.walk?.fence ?? null;
+        controllers.walk.walls = limits?.walk?.walls?.filter((w) => w.length >= 4) ?? null;
         controllers.orbit.fov = resetCamera.fov;
         controllers.fly.fov = resetCamera.fov;
         controllers.fly.collision = collision;
@@ -102366,6 +102472,9 @@ const createViewer = async (options) => {
     }
     // Create the viewer
     const viewer = new Viewer(global, gsplatLoad, skyboxLoad, collisionLoad);
+    // Gaussian Studio: the editor's wall tools
+    const collisionReady = collisionLoad ?? Promise.resolve(null);
+    let wallOverlay = null;
     viewer.onDestroy(persistPreferences(events));
     const handle = {
         app,
@@ -102384,6 +102493,15 @@ const createViewer = async (options) => {
         startXR: (mode) => viewer.startXR(mode),
         endXR: () => viewer.endXR(),
         destroy: () => viewer.destroy(),
+        collisionDistance: async (origin, direction, maxDistance) => {
+            const collision = await collisionReady;
+            const hit = collision?.queryRay(...origin, ...direction, maxDistance);
+            return hit ? Math.hypot(hit.x - origin[0], hit.y - origin[1], hit.z - origin[2]) : null;
+        },
+        showWalls: (walls) => {
+            wallOverlay ??= new WallOverlay(app, camera);
+            wallOverlay.set(walls);
+        },
         pick: async (x, y) => {
             const hit = await viewer.picker?.pick(x, y);
             return hit ? [hit.x, hit.y, hit.z] : null;

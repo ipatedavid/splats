@@ -79,8 +79,18 @@ const buildLimits = () => {
         }
         limits.orbit = orbit;
     }
-    if (draft.mode === 'walk' && draft.fence.length >= 3) {
-        limits.walk = { fence: draft.fence.map(([x, z]) => [round(x, 3), round(z, 3)]) };
+    if (draft.mode === 'walk') {
+        const walk = {};
+        if (draft.fence.length >= 3) {
+            walk.fence = draft.fence.map(([x, z]) => [round(x, 3), round(z, 3)]);
+        }
+        if (draft.walls?.length) {
+            // [x1, z1, x2, z2, ground height]; the height is only for drawing them here
+            walk.walls = draft.walls.map(({ a, b, y }) => [...a, ...b, y ?? 0].map((v) => round(v, 3)));
+        }
+        if (Object.keys(walk).length) {
+            limits.walk = walk;
+        }
     }
     return limits;
 };
@@ -115,6 +125,7 @@ const restartViewer = async () => {
         renderer: params.has('webgl') ? 'webgl' : 'webgpu'
     });
     window.viewer = viewer;
+    drawWalls();
     // Skip the intro animation: it would swallow the first button press, and dragging during it
     // drops into fly mode with the mouse captured. The camera is set up once the scene has
     // loaded, so switch then.
@@ -132,6 +143,66 @@ const restartViewer = async () => {
 };
 
 const pose = () => viewer?.cameraPose();
+
+// The walls as orange panels, while editing only (visitors never see them).
+const drawWalls = () => {
+    if (!viewer?.showWalls) return;
+    if (previewing) {
+        viewer.showWalls([]);
+        return;
+    }
+    const fallbackY = (pose()?.position[1] ?? 1.5) - 1.5;
+    viewer.showWalls((draft.walls ?? []).map(({ a, b, y }) => ({ a, b, y: y ?? fallbackY })));
+};
+
+const MAX_WALL_REACH = 15;
+
+// A wall across the opening in front of the camera, reaching sideways until it meets the
+// collision on each side (looked for at knee, waist and chest height, so low planters count).
+const blockThisWay = async () => {
+    if (viewer.state.cameraMode !== 'walk' && viewer.state.cameraMode !== 'fly') {
+        if (viewer.state.walkAllowed) viewer.state.cameraMode = 'walk';
+        setStatus('Switched to walking. Walk into the opening, face out of the area, and press again.');
+        return;
+    }
+    const p = pose();
+    const fx = p.focus[0] - p.position[0];
+    const fz = p.focus[2] - p.position[2];
+    const flat = Math.hypot(fx, fz);
+    if (flat < 1e-6) {
+        setStatus('Face along the ground, not straight up or down, then press again.');
+        return;
+    }
+    const [dirX, dirZ] = [fx / flat, fz / flat];
+    const down = await viewer.collisionDistance(p.position, [0, -1, 0], 10);
+    const ground = down === null ? p.position[1] - 1.5 : p.position[1] - down;
+    const cx = p.position[0] + dirX * 0.6;
+    const cz = p.position[2] + dirZ * 0.6;
+    const reach = async (side) => {
+        let nearest = null;
+        for (const h of [0.3, 0.8, 1.4]) {
+            const d = await viewer.collisionDistance([cx, ground + h, cz], [-dirZ * side, 0, dirX * side], MAX_WALL_REACH);
+            if (d !== null && (nearest === null || d < nearest)) nearest = d;
+        }
+        return nearest;
+    };
+    const [left, right] = [await reach(1), await reach(-1)];
+    if ((left ?? 1) < 0.05 && (right ?? 1) < 0.05) {
+        setStatus('That spot is inside something solid. Step back into the open and press again.');
+        return;
+    }
+    const l = (left ?? MAX_WALL_REACH) + 0.15;
+    const r = (right ?? MAX_WALL_REACH) + 0.15;
+    const a = [cx - dirZ * l, cz + dirX * l];
+    const b = [cx + dirZ * r, cz - dirX * r];
+    draft.walls = [...(draft.walls ?? []), { a, b, y: ground, open: [left === null, right === null] }];
+    saveDraft();
+    render();
+    const open = left === null || right === null;
+    setStatus(`Wall added, ${round(l + r, 1)} m wide.` + (open
+        ? ` One end found nothing within ${MAX_WALL_REACH} m, so it stops there; check it with Try as a visitor.`
+        : ''));
+};
 
 // Orbit marks only mean something in orbit mode.
 const ensureOrbit = () => {
@@ -177,6 +248,29 @@ const render = () => {
     $('#pan').value = draft.pan;
     $('#pan-margin').hidden = draft.pan !== 'box';
     $('#pan-margin').nextElementSibling.hidden = draft.pan !== 'box';
+
+    const wallList = $('#walls');
+    wallList.replaceChildren();
+    (draft.walls ?? []).forEach((wall, index) => {
+        const item = document.createElement('li');
+        const row = document.createElement('div');
+        row.className = 'row';
+        const label = document.createElement('span');
+        const width = Math.hypot(wall.b[0] - wall.a[0], wall.b[1] - wall.a[1]);
+        label.textContent = `${round(width, 1)} m wide` + (wall.open?.some(Boolean) ? ' · one end open' : '');
+        const remove = document.createElement('button');
+        remove.className = 'quiet';
+        remove.textContent = 'Remove';
+        remove.addEventListener('click', () => {
+            draft.walls.splice(index, 1);
+            saveDraft();
+            render();
+        });
+        row.append(label, remove);
+        item.append(row);
+        wallList.append(item);
+    });
+    drawWalls();
 
     $('#out-fence').textContent =
         draft.fence.length === 0
@@ -320,6 +414,13 @@ const wire = () => {
         draft.marks = {};
         draft.pan = 'free';
         draft.panBox = null;
+        saveDraft();
+        render();
+    });
+
+    $('#block-way').addEventListener('click', () => blockThisWay());
+    $('#clear-walls').addEventListener('click', () => {
+        draft.walls = [];
         saveDraft();
         render();
     });
@@ -494,6 +595,7 @@ const draftFrom = (limits, settings) => {
         pan: orbit?.pan === false ? 'locked' : Array.isArray(orbit?.pan) ? 'box' : 'free',
         panBox: Array.isArray(orbit?.pan) ? orbit.pan : null,
         fence: limits?.walk?.fence ?? [],
+        walls: (limits?.walk?.walls ?? []).map((w) => ({ a: [w[0], w[1]], b: [w[2], w[3]], y: w[4] ?? null, open: [false, false] })),
         startYaw: undefined,
         settings,
         base: siteVersion()
