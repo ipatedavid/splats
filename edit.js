@@ -87,8 +87,21 @@ const buildLimits = () => {
 
 // ---- the viewer ---------------------------------------------------------------------------
 
-const startViewer = async () => {
+// Restarts happen one at a time, and only the last one asked for survives: quick clicks on
+// Try as a visitor, the background colour or annotations never leave two viewers stacked.
+let restarting = Promise.resolve();
+let restartWanted = 0;
+const startViewer = () => {
+    const ticket = ++restartWanted;
+    restarting = restarting.then(() => (ticket === restartWanted ? restartViewer() : undefined)).catch((error) => {
+        setStatus(`The viewer could not start. ${error.message}`);
+    });
+    return restarting;
+};
+
+const restartViewer = async () => {
     viewer?.destroy();
+    viewer = null;
     stage.replaceChildren();
     const limits = previewing ? buildLimits() : undefined;
     document.body.classList.toggle('gs-locked', Boolean(previewing && limits?.mode));
