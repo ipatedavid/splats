@@ -1,18 +1,20 @@
 {
-  "name": "Your name",
-  "tagline": "Places and objects, captured in 3D",
-  "intro": "Gaussian splats: real places you can walk around in your browser. Pick one to open it.",
+  "name": "David Ipate",
+  "tagline": "Let's virtualise life.",
+  "intro": "I capture real places and objects as 3D scenes in photographic detail, so you can walk around them in your browser: artworks shown online the way they stand in the room, important places archived as they are, homes you can tour before you visit, food you can turn on your screen.",
   "links": [
-    { "label": "Instagram", "url": "https://instagram.com/" },
-    { "label": "Email", "url": "mailto:you@example.com" }
+    {
+      "label": "Email",
+      "url": "mailto:ipate.david@gmail.com"
+    }
   ],
   "scenes": [
     {
       "scene": "christmas-tree",
       "title": "Christmas tree",
-      "place": "Lobby",
+      "place": "Building lobby",
       "date": "October 2026",
-      "text": "A decorated tree in a building lobby, captured on a Fuji X-T20 with a fisheye lens."
+      "text": "A decorated tree and its presents in a lobby, captured on a Fuji X-T20 with a fisheye lens."
     }
   ]
 }
