@@ -102390,11 +102390,19 @@ const createViewer = async (options) => {
     // translate the markup and get this instance's string lookup, before the ui reads any
     const localize = initLocalization(config.lang, root);
     // Gaussian Studio: a scene with a locked mode never leaves it. Walk falls back to fly
-    // only until the collision data that walk needs has arrived.
+    // only until the collision data that walk needs has arrived. Picking an annotation
+    // orbits it as in the stock viewer; dropping the annotation returns to the locked mode.
     const lockedMode = config.limits?.mode;
+    let annotationOrbit = false;
     const modeGuard = lockedMode
         ? (property, value, target) => {
             if (property !== 'cameraMode' || value === lockedMode) {
+                if (property === 'cameraMode') {
+                    annotationOrbit = false;
+                }
+                return value;
+            }
+            if (value === 'orbit' && annotationOrbit) {
                 return value;
             }
             return lockedMode === 'walk' && !target.walkAllowed ? 'fly' : lockedMode;
@@ -102507,7 +102515,15 @@ const createViewer = async (options) => {
         frameScene: () => viewer.frameScene(),
         resetCamera: () => viewer.resetCamera(),
         toggleWalk: () => viewer.toggleWalk(),
-        selectAnnotation: (index) => viewer.selectAnnotation(index),
+        selectAnnotation: (index) => {
+            if (lockedMode && index !== null) {
+                annotationOrbit = true;
+            }
+            viewer.selectAnnotation(index);
+            if (lockedMode && index === null && annotationOrbit) {
+                state.cameraMode = lockedMode;
+            }
+        },
         setMoveInput: (x, z) => viewer.setMoveInput(x, z),
         requestFullscreen: () => viewer.requestFullscreen(),
         exitFullscreen: () => viewer.exitFullscreen(),
