@@ -10,6 +10,12 @@
   ],
   "scenes": [
     {
+      "scene": "cozy-apartment",
+      "title": "Cozy apartment",
+      "place": "Cozy apartment",
+      "date": "October 2026"
+    },
+    {
       "scene": "playground-at-coast",
       "title": "Playground at Coast",
       "date": "October 2026",
