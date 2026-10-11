@@ -56,6 +56,29 @@ const yawRange = (a, b, inside) => {
 const sorted = (a, b) => (a <= b ? [a, b] : [b, a]);
 
 const MODES = ['orbit', 'walk', 'fly'];
+
+// Scene types: sensible defaults for the modes and what the camera bumps into. Anything changed
+// under Advanced makes the scene Custom.
+const PRESETS = {
+    object: { modes: ['orbit'], mode: 'orbit', collision: { orbit: false, fly: true }, holdOrbit: false },
+    room: { modes: ['orbit', 'walk'], mode: 'walk', collision: { orbit: false, fly: true }, holdOrbit: false },
+    place: { modes: ['orbit', 'walk', 'fly'], mode: 'orbit', collision: { orbit: false, fly: true }, holdOrbit: false }
+};
+const PRESET_HINTS = {
+    object: 'Visitors circle one subject: orbit only, around a fixed point. Set the point below.',
+    room: 'Visitors walk through the space and can switch to orbit. Walking bumps into the walls; in orbit the camera floats.',
+    place: 'Visitors orbit, walk and fly freely within the box.',
+    custom: 'Custom: set under Advanced.'
+};
+const presetOf = () => {
+    const modes = MODES.filter((m) => draft.modes.includes(m));
+    return Object.keys(PRESETS).find((name) => {
+        const p = PRESETS[name];
+        return p.modes.join() === modes.join() && p.mode === startMode() &&
+            p.collision.orbit === draft.collision.orbit && p.collision.fly === draft.collision.fly &&
+            p.holdOrbit === draft.holdOrbit;
+    }) ?? 'custom';
+};
 const MODE_LABELS = { orbit: 'Orbit', walk: 'Walk', fly: 'Fly' };
 
 // The modes visitors get, in a fixed order, and the one they start in. All three with no
@@ -101,6 +124,8 @@ const buildLimits = () => {
             limits.orbit = orbit;
         }
     }
+    limits.preset = presetOf();
+    limits.collision = { ...draft.collision };
     if (draft.box) {
         limits.box = {
             center: draft.box.center.map((v) => round(v, 3)),
@@ -117,6 +142,9 @@ const buildLimits = () => {
         if (draft.walls?.length) {
             // [x1, z1, x2, z2, ground height]; the height is only for drawing them here
             walk.walls = draft.walls.map(({ a, b, y }) => [...a, ...b, y ?? 0].map((v) => round(v, 3)));
+        }
+        if (draft.holdOrbit && (walk.walls || walk.fence)) {
+            walk.holdOrbit = true;
         }
         if (Object.keys(walk).length) {
             limits.walk = walk;
@@ -179,7 +207,7 @@ const pose = () => viewer?.cameraPose();
 const describeBox = (box) =>
     box
         ? `${box.size.map((v) => round(v, 1)).join(' × ')} m, turned ${round(box.yaw ?? 0, 0)}°`
-        : 'No box: the splat\'s own bounds hold the orbit camera.';
+        : 'No box yet: nothing holds visitors at the edge of the splat.';
 const drawBox = () => {
     if (!viewer?.editBox) return;
     viewer.editBox(previewing ? null : draft.box, draft.boxTool, (box) => {
@@ -296,6 +324,7 @@ const render = () => {
         input.disabled = !draft.box;
     }
     $('#box-remove').hidden = !draft.box;
+    $('#box-tool').hidden = !draft.box;
     $('#box-add').textContent = draft.box ? 'Move the box here' : 'Add a box here';
     $('#out-box').textContent = describeBox(draft.box);
     drawBox();
@@ -341,11 +370,17 @@ const render = () => {
     });
     drawWalls();
 
-    $('#out-fence').textContent =
-        draft.fence.length === 0
-            ? 'No fence yet.'
-            : `${draft.fence.length} corner${draft.fence.length === 1 ? '' : 's'}` +
-              (draft.fence.length < 3 ? ' — needs at least 3.' : '.');
+    $('#old-fence').hidden = draft.fence.length === 0;
+    $('#out-fence').textContent = `This scene has a fence from before (${draft.fence.length} corners); the box does its job now.`;
+    const preset = presetOf();
+    for (const input of document.querySelectorAll('input[name="preset"]')) {
+        input.checked = input.value === preset;
+    }
+    $('#preset-hint').textContent = PRESET_HINTS[preset];
+    $('#object-point').hidden = preset !== 'object' && !draft.orbitTarget;
+    $('#collide-orbit').checked = draft.collision.orbit;
+    $('#collide-fly').checked = draft.collision.fly;
+    $('#walls-orbit').checked = draft.holdOrbit;
 
     const [r, g, b] = draft.settings.background.color;
     const hex = (v) => Math.round(v * 255).toString(16).padStart(2, '0');
@@ -629,14 +664,31 @@ const wire = () => {
         render();
     });
 
-    $('#add-corner').addEventListener('click', () => {
-        const [x, , z] = pose().position;
-        draft.fence.push([x, z]);
-        saveDraft();
-        render();
-    });
-    $('#undo-corner').addEventListener('click', () => {
-        draft.fence.pop();
+    for (const input of document.querySelectorAll('input[name="preset"]')) {
+        input.addEventListener('change', () => {
+            const p = PRESETS[input.value];
+            draft.modes = [...p.modes];
+            draft.mode = p.mode;
+            draft.collision = { ...p.collision };
+            draft.holdOrbit = p.holdOrbit;
+            saveDraft();
+            render();
+            if (viewer && p.mode === 'orbit') viewer.state.cameraMode = 'orbit';
+            else if (viewer && p.mode === 'walk' && viewer.state.walkAllowed) viewer.state.cameraMode = 'walk';
+            setStatus(input.value === 'object' && !draft.orbitTarget
+                ? 'Object: click the subject, then press Use the current focus as the orbit point.'
+                : `${input.value[0].toUpperCase()}${input.value.slice(1)} settings applied.`);
+        });
+    }
+    for (const [id, key] of [['#collide-orbit', 'orbit'], ['#collide-fly', 'fly']]) {
+        $(id).addEventListener('change', () => {
+            draft.collision = { ...draft.collision, [key]: $(id).checked };
+            saveDraft();
+            render();
+        });
+    }
+    $('#walls-orbit').addEventListener('change', () => {
+        draft.holdOrbit = $('#walls-orbit').checked;
         saveDraft();
         render();
     });
@@ -797,6 +849,8 @@ const draftFrom = (limits, settings) => {
         mode: limits?.mode ?? null,
         modes: limits?.modes?.length ? [...limits.modes] : limits?.mode ? [limits.mode] : [...MODES],
         orbitTarget: orbit?.target ?? null,
+        collision: { orbit: limits?.collision?.orbit ?? false, fly: limits?.collision?.fly ?? true },
+        holdOrbit: Boolean(limits?.walk?.holdOrbit),
         box: limits?.box ?? null,
         boxTool: 'move',
         marks,
@@ -826,6 +880,8 @@ if (!folder) {
             draft.modes ??= draft.mode ? [draft.mode] : [...MODES];
             draft.orbitTarget ??= null;
             draft.box ??= null;
+            draft.collision ??= { orbit: false, fly: true };
+            draft.holdOrbit ??= false;
             draft.boxTool ??= 'move';
             setStatus('Continuing your unsaved draft from last time.');
         } else {

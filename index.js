@@ -91702,6 +91702,131 @@ class AnimController {
     }
 }
 
+// Gaussian Studio: keep a point inside a ground fence (x, z polygon). Inside: unchanged.
+// Outside: moved to the nearest point on the fence. Returns true if it moved the point.
+const fencePoint = (fence, pos) => {
+    if (fence.length < 3) {
+        return false;
+    }
+    let inside = false;
+    for (let i = 0, j = fence.length - 1; i < fence.length; j = i++) {
+        const [xi, zi] = fence[i];
+        const [xj, zj] = fence[j];
+        if (zi > pos.z !== zj > pos.z && pos.x < ((xj - xi) * (pos.z - zi)) / (zj - zi) + xi) {
+            inside = !inside;
+        }
+    }
+    if (inside) {
+        return false;
+    }
+    let bestX = pos.x;
+    let bestZ = pos.z;
+    let best = Infinity;
+    for (let i = 0, j = fence.length - 1; i < fence.length; j = i++) {
+        const [ax, az] = fence[j];
+        const [bx, bz] = fence[i];
+        const dx = bx - ax;
+        const dz = bz - az;
+        const len = dx * dx + dz * dz;
+        const t = len > 0 ? Math.max(0, Math.min(1, ((pos.x - ax) * dx + (pos.z - az) * dz) / len)) : 0;
+        const cx = ax + t * dx;
+        const cz = az + t * dz;
+        const dist = (pos.x - cx) ** 2 + (pos.z - cz) ** 2;
+        if (dist < best) {
+            best = dist;
+            bestX = cx;
+            bestZ = cz;
+        }
+    }
+    pos.x = bestX;
+    pos.z = bestZ;
+    return true;
+};
+// Gaussian Studio: keep a step from going through any wall ([x1, z1, x2, z2] on the ground).
+// The point stays at least `radius` from the wall on the side it came from; only the part of
+// the move into the wall is removed, so visitors slide along it. Returns true if it pushed.
+const wallStep = (walls, from, to, radius, velocity) => {
+    let pushed = false;
+    for (const [ax, az, bx, bz] of walls) {
+        const dx = bx - ax;
+        const dz = bz - az;
+        const length = Math.hypot(dx, dz);
+        if (!length) {
+            continue;
+        }
+        const nx = -dz / length;
+        const nz = dx / length;
+        const along = ((to.x - ax) * dx + (to.z - az) * dz) / (length * length);
+        if (along < -radius / length || along > 1 + radius / length) {
+            continue; // past the wall's ends
+        }
+        const side = (from.x - ax) * nx + (from.z - az) * nz >= 0 ? 1 : -1;
+        const distance = ((to.x - ax) * nx + (to.z - az) * nz) * side;
+        if (distance < radius) {
+            to.x += nx * side * (radius - distance);
+            to.z += nz * side * (radius - distance);
+            const into = (velocity.x * nx + velocity.z * nz) * side;
+            if (into < 0) {
+                velocity.x -= nx * side * into;
+                velocity.z -= nz * side * into;
+            }
+            pushed = true;
+        }
+    }
+    return pushed;
+};
+// A point relative to the box's centre, along the box's own axes.
+const local = (box, p) => {
+    const t = ((box.yaw ?? 0) * Math.PI) / 180;
+    const dx = p.x - box.center[0];
+    const dz = p.z - box.center[2];
+    return [dx * Math.cos(t) - dz * Math.sin(t), p.y - box.center[1], dx * Math.sin(t) + dz * Math.cos(t)];
+};
+/** How far a point is outside the box (0 inside); `flat` ignores height, for walking. */
+const outsideBox = (box, p, flat = false) => {
+    const l = local(box, p);
+    let sum = 0;
+    for (let i = 0; i < 3; i++) {
+        if (flat && i === 1)
+            continue;
+        const over = Math.abs(l[i]) - box.size[i] / 2;
+        if (over > 0)
+            sum += over * over;
+    }
+    return Math.sqrt(sum);
+};
+// The box's edge is soft: a camera pushed past it meets more and more resistance, up to a
+// stretch past the edge, and springs back inside once the visitor lets go.
+/** How far past the box a camera may be stretched: 12% of its smallest side, 0.25 to 1 m. */
+const boxStretch = (box) => Math.min(1, Math.max(0.25, 0.12 * Math.min(...box.size)));
+/** The share of an outward move that goes through, for a camera already `outside` the edge. */
+const resistance = (outside, stretch) => {
+    const t = Math.min(1, outside / stretch);
+    return (1 - t) * (1 - t);
+};
+/** How quickly a released camera springs back inside: the share of the way covered per second. */
+const SPRING_RATE = 6;
+/** Move a point into the box (`margin` inside its faces). Returns true if it moved. */
+const clampToBox = (box, p, margin = 0) => {
+    const l = local(box, p);
+    let moved = false;
+    for (let i = 0; i < 3; i++) {
+        const half = Math.max(0, box.size[i] / 2 - margin);
+        const clamped = Math.max(-half, Math.min(half, l[i]));
+        if (clamped !== l[i]) {
+            l[i] = clamped;
+            moved = true;
+        }
+    }
+    if (moved) {
+        const t = ((box.yaw ?? 0) * Math.PI) / 180;
+        p.x = box.center[0] + l[0] * Math.cos(t) + l[2] * Math.sin(t);
+        p.y = box.center[1] + l[1];
+        p.z = box.center[2] - l[0] * Math.sin(t) + l[2] * Math.cos(t);
+    }
+    return moved;
+};
+
 const rotation = new Quat();
 const avec = new Vec3();
 const bvec = new Vec3();
@@ -92202,132 +92327,8 @@ const findCylinderSpawn = (collision, ox, oy, oz, halfHeight, radius, out) => {
     return found;
 };
 
-// Gaussian Studio: keep a point inside a ground fence (x, z polygon). Inside: unchanged.
-// Outside: moved to the nearest point on the fence. Returns true if it moved the point.
-const fencePoint = (fence, pos) => {
-    if (fence.length < 3) {
-        return false;
-    }
-    let inside = false;
-    for (let i = 0, j = fence.length - 1; i < fence.length; j = i++) {
-        const [xi, zi] = fence[i];
-        const [xj, zj] = fence[j];
-        if (zi > pos.z !== zj > pos.z && pos.x < ((xj - xi) * (pos.z - zi)) / (zj - zi) + xi) {
-            inside = !inside;
-        }
-    }
-    if (inside) {
-        return false;
-    }
-    let bestX = pos.x;
-    let bestZ = pos.z;
-    let best = Infinity;
-    for (let i = 0, j = fence.length - 1; i < fence.length; j = i++) {
-        const [ax, az] = fence[j];
-        const [bx, bz] = fence[i];
-        const dx = bx - ax;
-        const dz = bz - az;
-        const len = dx * dx + dz * dz;
-        const t = len > 0 ? Math.max(0, Math.min(1, ((pos.x - ax) * dx + (pos.z - az) * dz) / len)) : 0;
-        const cx = ax + t * dx;
-        const cz = az + t * dz;
-        const dist = (pos.x - cx) ** 2 + (pos.z - cz) ** 2;
-        if (dist < best) {
-            best = dist;
-            bestX = cx;
-            bestZ = cz;
-        }
-    }
-    pos.x = bestX;
-    pos.z = bestZ;
-    return true;
-};
-// Gaussian Studio: keep a step from going through any wall ([x1, z1, x2, z2] on the ground).
-// The point stays at least `radius` from the wall on the side it came from; only the part of
-// the move into the wall is removed, so visitors slide along it. Returns true if it pushed.
-const wallStep = (walls, from, to, radius, velocity) => {
-    let pushed = false;
-    for (const [ax, az, bx, bz] of walls) {
-        const dx = bx - ax;
-        const dz = bz - az;
-        const length = Math.hypot(dx, dz);
-        if (!length) {
-            continue;
-        }
-        const nx = -dz / length;
-        const nz = dx / length;
-        const along = ((to.x - ax) * dx + (to.z - az) * dz) / (length * length);
-        if (along < -radius / length || along > 1 + radius / length) {
-            continue; // past the wall's ends
-        }
-        const side = (from.x - ax) * nx + (from.z - az) * nz >= 0 ? 1 : -1;
-        const distance = ((to.x - ax) * nx + (to.z - az) * nz) * side;
-        if (distance < radius) {
-            to.x += nx * side * (radius - distance);
-            to.z += nz * side * (radius - distance);
-            const into = (velocity.x * nx + velocity.z * nz) * side;
-            if (into < 0) {
-                velocity.x -= nx * side * into;
-                velocity.z -= nz * side * into;
-            }
-            pushed = true;
-        }
-    }
-    return pushed;
-};
-// A point relative to the box's centre, along the box's own axes.
-const local = (box, p) => {
-    const t = ((box.yaw ?? 0) * Math.PI) / 180;
-    const dx = p.x - box.center[0];
-    const dz = p.z - box.center[2];
-    return [dx * Math.cos(t) - dz * Math.sin(t), p.y - box.center[1], dx * Math.sin(t) + dz * Math.cos(t)];
-};
-/** How far a point is outside the box (0 inside). */
-const outsideBox = (box, p) => {
-    const l = local(box, p);
-    let sum = 0;
-    for (let i = 0; i < 3; i++) {
-        const over = Math.abs(l[i]) - box.size[i] / 2;
-        if (over > 0)
-            sum += over * over;
-    }
-    return Math.sqrt(sum);
-};
-/** Move a point into the box (`margin` inside its faces). Returns true if it moved. */
-const clampToBox = (box, p, margin = 0) => {
-    const l = local(box, p);
-    let moved = false;
-    for (let i = 0; i < 3; i++) {
-        const half = Math.max(0, box.size[i] / 2 - margin);
-        const clamped = Math.max(-half, Math.min(half, l[i]));
-        if (clamped !== l[i]) {
-            l[i] = clamped;
-            moved = true;
-        }
-    }
-    if (moved) {
-        const t = ((box.yaw ?? 0) * Math.PI) / 180;
-        p.x = box.center[0] + l[0] * Math.cos(t) + l[2] * Math.sin(t);
-        p.y = box.center[1] + l[1];
-        p.z = box.center[2] - l[0] * Math.sin(t) + l[2] * Math.cos(t);
-    }
-    return moved;
-};
-/** The box's outline on the ground, as fence corners [x, z] in order. */
-const boxOutline = (box) => {
-    const t = ((box.yaw ?? 0) * Math.PI) / 180;
-    const [hx, , hz] = box.size.map((s) => s / 2);
-    return [
-        [-hx, -hz],
-        [hx, -hz],
-        [hx, hz],
-        [-hx, hz]
-    ].map(([x, z]) => [
-        box.center[0] + x * Math.cos(t) + z * Math.sin(t),
-        box.center[2] - x * Math.sin(t) + z * Math.cos(t)
-    ]);
-};
-
+const stepFrom = new Vec3();
+const home$2 = new Vec3();
 /** Radius of the camera collision sphere (meters) */
 const CAMERA_RADIUS = 0.2;
 const forward$2 = new Vec3();
@@ -92417,7 +92418,7 @@ class FlyController {
         const { move, rotate } = inputFrame.read();
         applyFrameRotation(this._targetAngles, rotate);
         dampAngles(this._angles, this._targetAngles, this.rotateDamping, deltaTime);
-        this._step(move);
+        this._step(move, deltaTime);
         camera.position.copy(this._position);
         camera.angles.set(this._angles.x, this._angles.y, 0);
         camera.distance = this._distance;
@@ -92456,15 +92457,36 @@ class FlyController {
     _storeSpawn() {
         this._spawn.store(this._position, this._angles, this._distance);
     }
-    /** Gaussian Studio: the boundary box; flying stays inside it. */
+    /** Gaussian Studio: the boundary box, soft at its edge; flying stays near it. */
     box = null;
-    _step(move) {
+    _step(move, dt) {
         setCameraBasis(this._angles, forward$2, right$2, up$1);
         setBasisOffset(offset$1, move[0], move[1], move[2], forward$2, right$2, up$1);
+        stepFrom.copy(this._position);
         this._mover.move(this._position, offset$1);
-        if (this.box && clampToBox(this.box, this._position, 0.1)) {
+        if (this.box && this._softBox(stepFrom, move, dt)) {
             this._mover.reset(this._position);
         }
+    }
+    /**
+     * Gaussian Studio: past the box's edge an outward step keeps only the share the
+     * resistance lets through (none past the stretch); let go outside, the camera eases back.
+     */
+    _softBox(from, move, dt) {
+        const box = this.box;
+        const stretch = boxStretch(box);
+        const before = outsideBox(box, from);
+        if (outsideBox(box, this._position) > before + 1e-6) {
+            this._position.lerp(from, this._position, resistance(before, stretch));
+            clampToBox(box, this._position, -stretch);
+            return true;
+        }
+        if (move.some((v) => Math.abs(v) > 1e-9) || before < 1e-4) {
+            return false;
+        }
+        clampToBox(box, home$2.copy(this._position));
+        this._position.lerp(this._position, home$2, Math.min(1, SPRING_RATE * dt));
+        return true;
     }
 }
 
@@ -92702,6 +92724,7 @@ const push = { x: 0, y: 0, z: 0 };
 // The engine's damping: the share of the way to the target covered in `dt` seconds.
 const damp = (damping, dt) => 1 - Math.pow(damping, dt * 1000);
 const prevRoot = new Vec3();
+const home$1 = new Vec3();
 const easedFocus = new Vec3();
 const easedAngles = new Vec3();
 const prevAngles = new Vec3();
@@ -92738,12 +92761,14 @@ class OrbitController {
         this._attach(camera);
     }
     update(deltaTime, inputFrame, camera) {
+        const move = inputFrame.deltas.move._value;
         if (this._limits?.pan === false || this._limits?.target) {
             // drop the sideways and up/down part of the move input; zoom (index 2) stays
-            const move = inputFrame.deltas.move._value;
             move[0] = 0;
             move[1] = 0;
         }
+        const rotate = inputFrame.deltas.rotate._value;
+        const input = move.some((v) => Math.abs(v) > 1e-9) || rotate.some((v) => Math.abs(v) > 1e-9);
         const root = this._root();
         const child = this._child();
         prevRoot.copy(root.position);
@@ -92754,7 +92779,9 @@ class OrbitController {
         easedAngles.copy(engine._rootPose.angles);
         const easedZoom = engine._childPose.position.z;
         const pose = this.controller.update(inputFrame, deltaTime);
-        if (this.barriers && this._holdAtBarriers(prevRoot, prevZoom, prevAngles)) {
+        const held = this.barriers && this._holdAtBarriers(prevRoot, prevZoom, prevAngles);
+        const softened = this.barriers?.box && this._softBox(prevRoot, prevZoom, prevAngles, input, deltaTime);
+        if (held || softened) {
             // the engine already eased toward the targets before they were held: redo this
             // frame's easing toward the held ones, or the view would creep past the barrier
             engine._rootPose.position.copy(easedFocus);
@@ -92836,20 +92863,54 @@ class OrbitController {
         root.angles.copy(keep[2] ? nextAngles : prevTurn);
         return true;
     }
-    _blocked(from, to) {
-        const { bounds, box, walls, fence } = this.barriers;
-        if (box) {
-            // the boundary box: never out of it, and from outside only towards it
-            const before = outsideBox(box, from);
-            if (outsideBox(box, to) > (before > 0 ? before : 0) + 1e-6) {
-                return true;
+    /**
+     * The soft box, on the targets: an outward move keeps only the share the resistance lets
+     * through (none past the stretch), and with no input a camera outside springs back in.
+     * Returns true if it changed the targets.
+     */
+    _softBox(prevFocus, prevZoom, prevTurn, input, dt) {
+        const box = this.barriers.box;
+        const root = this._root();
+        const child = this._child();
+        const at = (focus, z, angles, out) => {
+            turn.setFromEulerAngles(angles);
+            return turn.transformVector(out.set(0, 0, z), out).add(focus);
+        };
+        const stretch = boxStretch(box);
+        at(prevFocus, prevZoom, prevTurn, camFrom);
+        const before = outsideBox(box, camFrom);
+        const after = outsideBox(box, at(root.position, child.position.z, root.angles, camTo));
+        if (after > before + 1e-6) {
+            const share = resistance(before, stretch);
+            root.position.lerp(prevFocus, root.position, share);
+            // the shorter way round, so a turn across 180° does not swing back
+            const arc = (a, b) => a + (((b - a + 540) % 360) - 180) * share;
+            root.angles.set(arc(prevTurn.x, root.angles.x), arc(prevTurn.y, root.angles.y), arc(prevTurn.z, root.angles.z));
+            child.position.z = prevZoom + (child.position.z - prevZoom) * share;
+            if (outsideBox(box, at(root.position, child.position.z, root.angles, camTo)) > stretch) {
+                root.position.copy(prevFocus);
+                root.angles.copy(prevTurn);
+                child.position.z = prevZoom;
             }
-        }
-        else if (bounds.containsPoint(from) && !bounds.containsPoint(to)) {
-            // without one, the splat's bounds hold a camera that is inside them (an orbit
-            // scene that circles the subject from outside is not pulled in)
             return true;
         }
+        if (input || before < 1e-4) {
+            return false;
+        }
+        // let go outside the box: ease the camera back in
+        const k = Math.min(1, SPRING_RATE * dt);
+        clampToBox(box, home$1.copy(camFrom));
+        if (this._limits?.target) {
+            // a fixed orbit point cannot move: come in along the view instead
+            child.position.z = Math.max(this._zoom.x, prevZoom - camFrom.distance(home$1) * k);
+        }
+        else {
+            root.position.copy(prevFocus).add(home$1.sub(camFrom).mulScalar(k));
+        }
+        return true;
+    }
+    _blocked(from, to) {
+        const { walls, fence } = this.barriers;
         if (fence && !fencePoint(fence, probe.copy(from)) && fencePoint(fence, probe.copy(to))) {
             return true;
         }
@@ -92917,6 +92978,7 @@ const spawnProbe = new Vec3();
  * collision handles walls and obstacles. When airborne, normal gravity applies.
  */
 const stepStart = new Vec3();
+const home = new Vec3();
 /** Gaussian Studio: eyes sit about this far below the top of the head, in meters. */
 const EYE_BELOW_TOP_OF_HEAD = 0.11;
 class WalkController {
@@ -92924,11 +92986,8 @@ class WalkController {
      * Gaussian Studio: ground outline visitors cannot leave, [x, z] corners in order.
      */
     fence = null;
-    _boxFence = null;
-    /** Gaussian Studio: the boundary box; walking stays inside its outline. */
-    set box(value) {
-        this._boxFence = value ? boxOutline(value) : null;
-    }
+    /** Gaussian Studio: the boundary box, soft at its edge (on the ground: height is free). */
+    box = null;
     /**
      * Gaussian Studio: walls visitors cannot walk through, [x1, z1, x2, z2].
      */
@@ -93201,14 +93260,46 @@ class WalkController {
             this._velocity.x = 0;
             this._velocity.z = 0;
         }
-        if (this._boxFence && fencePoint(this._boxFence, this._position)) {
-            this._velocity.x = 0;
-            this._velocity.z = 0;
+        if (this.box) {
+            this._softBox(dt, move);
         }
         // the walls: never through one; slide along it
         if (this.walls) {
             wallStep(this.walls, stepStart, this._position, this.capsuleRadius, this._velocity);
         }
+    }
+    /**
+     * Past the box's outline an outward step keeps only the share the resistance lets through
+     * (none past the stretch); standing still outside, the walker is eased back in.
+     */
+    _softBox(dt, move) {
+        const box = this.box;
+        const stretch = boxStretch(box);
+        const before = outsideBox(box, stepStart, true);
+        if (outsideBox(box, this._position, true) > before + 1e-6) {
+            const share = resistance(before, stretch);
+            this._position.x = stepStart.x + (this._position.x - stepStart.x) * share;
+            this._position.z = stepStart.z + (this._position.z - stepStart.z) * share;
+            this._velocity.x *= share;
+            this._velocity.z *= share;
+            if (outsideBox(box, this._position, true) > stretch) {
+                const y = this._position.y;
+                clampToBox(box, this._position, -stretch);
+                this._position.y = y;
+            }
+            return;
+        }
+        if (Math.abs(move[0]) > 1e-9 || Math.abs(move[2]) > 1e-9 || before < 1e-4) {
+            return;
+        }
+        const y = this._position.y;
+        clampToBox(box, home.copy(this._position));
+        const k = Math.min(1, SPRING_RATE * dt);
+        this._position.x += (home.x - this._position.x) * k;
+        this._position.z += (home.z - this._position.z) * k;
+        this._position.y = y;
+        this._velocity.x = 0;
+        this._velocity.z = 0;
     }
     onExit(_camera) {
         // nothing to clean up
@@ -93224,9 +93315,6 @@ class WalkController {
         this._position.copy(camera.position);
         if (this.fence) {
             fencePoint(this.fence, this._position);
-        }
-        if (this._boxFence) {
-            fencePoint(this._boxFence, this._position);
         }
         this._prevPosition.copy(this._position);
         // angles (clamp pitch to avoid gimbal lock)
@@ -93564,26 +93652,29 @@ class CameraManager {
         };
         controllers.walk.fence = limits?.walk?.fence ?? null;
         controllers.walk.walls = limits?.walk?.walls?.filter((w) => w.length >= 4) ?? null;
-        // visitors cannot pan or zoom the orbit camera through the scene, its walls and fence,
-        // or out of the splat (the editor passes no limits, so it moves freely)
+        // For visitors (the editor passes no limits, so it moves freely): the soft box holds
+        // every mode. The orbit camera bumps into the scene, the walls and the fence only when
+        // the scene asks for it; walking always does, flying unless it is turned off.
         const box = limits?.box ?? null;
         controllers.walk.box = box;
         controllers.fly.box = box;
+        const orbitWalls = Boolean(limits?.walk?.holdOrbit);
         if (limits) {
             controllers.orbit.barriers = {
-                bounds: bbox,
                 box,
-                walls: controllers.walk.walls,
-                fence: controllers.walk.fence
+                walls: orbitWalls ? controllers.walk.walls : null,
+                fence: orbitWalls ? controllers.walk.fence : null
             };
         }
+        const orbitCollides = Boolean(limits?.collision?.orbit);
+        const flyCollides = limits?.collision?.fly !== false;
         controllers.walk.setBodyHeight(global.visitorHeight ?? null);
         events.on('visitorHeight:changed', (height) => controllers.walk.setBodyHeight(height));
         controllers.orbit.fov = resetCamera.fov;
         controllers.fly.fov = resetCamera.fov;
-        controllers.fly.collision = collision;
+        controllers.fly.collision = flyCollides ? collision : null;
         controllers.walk.collision = collision;
-        controllers.orbit.collision = collision;
+        controllers.orbit.collision = orbitCollides ? collision : null;
         const walkSource = new WalkSource();
         const flySource = new FlySource();
         const sourcesByMode = {
@@ -93611,6 +93702,8 @@ class CameraManager {
         // null until the first mode change, so the fallback tracks `walkAllowed` if collision
         // attaches before the user has moved
         let fromMode = null;
+        // Gaussian Studio: the last edge pressure reported (see the update below)
+        let edgePressure = 0;
         // tracks the mode to restore when exiting walk
         let preWalkMode = isObjectExperience ? 'orbit' : 'fly';
         // enter the initial controller
@@ -93637,9 +93730,9 @@ class CameraManager {
         };
         this.transitionProgress = () => (transitionTimer < 1 ? transitionEase(transitionTimer) : 1);
         this.setCollision = (value) => {
-            controllers.fly.collision = value;
+            controllers.fly.collision = flyCollides ? value : null;
             controllers.walk.collision = value;
-            controllers.orbit.collision = value;
+            controllers.orbit.collision = orbitCollides ? value : null;
             walkAllowed = isWalkAllowed(bbox, value);
         };
         this.snap = () => {
@@ -93679,6 +93772,16 @@ class CameraManager {
             }
             if (deltaTime > 0) {
                 cameraSpeed = this.camera.position.distance(lastPosition) / deltaTime;
+            }
+            // Gaussian Studio: how hard the camera is pressed past the box's soft edge, 0 to 1,
+            // for the page to show (a glow at the screen's edges)
+            if (box && state.cameraMode !== 'anim') {
+                const outside = outsideBox(box, this.camera.position, state.cameraMode === 'walk');
+                const pressure = Math.min(1, outside / boxStretch(box));
+                if (Math.abs(pressure - edgePressure) > 0.02 || (pressure === 0 && edgePressure !== 0)) {
+                    edgePressure = pressure;
+                    events.fire('edgePressure:changed', pressure);
+                }
             }
             lastPosition.copy(this.camera.position);
             // update animation timeline

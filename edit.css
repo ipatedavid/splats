@@ -212,3 +212,33 @@ body.gs-locked .sse-walkShortcut {
 #annotations li .ann-limits .row {
     justify-content: flex-start;
 }
+/* the settings most scenes never need, folded away */
+#advanced {
+    border-top: 1px solid var(--line);
+    padding-top: 10px;
+}
+#advanced > summary {
+    cursor: pointer;
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+    padding: 4px 0;
+}
+#advanced > summary:hover,
+#advanced > summary:focus-visible {
+    color: var(--text);
+}
+#advanced[open] > summary {
+    margin-bottom: 6px;
+}
+#advanced section {
+    margin-top: 10px;
+}
+label.check {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    cursor: pointer;
+}

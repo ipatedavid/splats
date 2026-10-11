@@ -145,6 +145,17 @@
                 padding: 0;
                 font-size: 16px;
             }
+            /* A soft glow at the screen's edges while the camera is pressed past the scene's
+               boundary, so visitors feel why it slows and springs back. */
+            .gs-edge {
+                position: fixed;
+                inset: 0;
+                z-index: 5;
+                pointer-events: none;
+                opacity: 0;
+                transition: opacity 0.25s ease-out;
+                box-shadow: inset 0 0 90px 24px rgba(255, 255, 255, 0.28);
+            }
             .gs-message {
                 position: fixed;
                 inset: 0;
@@ -368,6 +379,13 @@
                         renderer: params.has('webgl') ? 'webgl' : 'webgpu'
                     });
                     document.body.append(pills);
+                    const edge = document.createElement('div');
+                    edge.className = 'gs-edge';
+                    document.body.append(edge);
+                    window.viewer.events.on('edgePressure:changed', (pressure) => {
+                        // clearly there as soon as the edge resists, stronger the further out
+                        edge.style.opacity = pressure > 0.01 ? String(Math.min(1, 0.3 + Math.sqrt(pressure))) : '0';
+                    });
                     tourControl(window.viewer, modes);
                     heightControl(window.viewer);
                 } catch (error) {

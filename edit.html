@@ -22,96 +22,27 @@
             </header>
 
             <section>
-                <h2>Visitors get</h2>
-                <div class="segmented" role="group" aria-label="Camera modes for visitors">
-                    <label><input type="checkbox" name="modes" value="orbit" /> Orbit</label>
-                    <label><input type="checkbox" name="modes" value="walk" /> Walk</label>
-                    <label><input type="checkbox" name="modes" value="fly" /> Fly</label>
+                <h2>Scene type</h2>
+                <div class="segmented" role="radiogroup" aria-label="Scene type">
+                    <label><input type="radio" name="preset" value="object" /> Object</label>
+                    <label><input type="radio" name="preset" value="room" /> Room</label>
+                    <label><input type="radio" name="preset" value="place" /> Place</label>
                 </div>
-                <div class="row" id="start-row">
-                    <label for="start-mode">Starts in</label>
-                    <select id="start-mode"></select>
+                <p class="hint" id="preset-hint"></p>
+                <div id="object-point">
+                    <div class="row">
+                        <button id="orbit-point">Use the current focus as the orbit point</button>
+                        <button class="quiet" id="clear-orbit-point">Clear</button>
+                    </div>
+                    <output id="out-orbit-point"></output>
                 </div>
-                <p class="hint" id="mode-hint"></p>
             </section>
-
-            <section id="orbit-tools" hidden>
-                <h2>Orbit limits</h2>
-                <div class="row">
-                    <span>Orbit point</span>
-                    <button id="orbit-point">Use the current focus</button>
-                    <button class="quiet" id="clear-orbit-point">Clear</button>
-                </div>
-                <output id="out-orbit-point"></output>
-                <p class="hint">
-                    A fixed point visitors orbit; they cannot pan or click a new one. Click the subject
-                    first so the view circles it. Annotations still open, and closing one comes back here.
-                </p>
-                <p class="hint">Move the view to the edge you want, then press the matching button.</p>
-                <div class="grid">
-                    <span>Turn</span>
-                    <button data-mark="left">Left edge here</button>
-                    <button data-mark="right">Right edge here</button>
-                    <output id="out-yaw"></output>
-                    <span>Tilt</span>
-                    <button data-mark="low">Lowest here</button>
-                    <button data-mark="high">Highest here</button>
-                    <output id="out-pitch"></output>
-                    <span>Zoom</span>
-                    <button data-mark="near">Closest here</button>
-                    <button data-mark="far">Furthest here</button>
-                    <output id="out-distance"></output>
-                </div>
-                <div class="row">
-                    <label for="pan">Panning</label>
-                    <select id="pan">
-                        <option value="free">Free</option>
-                        <option value="locked">Locked</option>
-                        <option value="box">Near the current focus</option>
-                    </select>
-                    <input id="pan-margin" type="number" min="0.1" step="0.1" value="1" aria-label="Distance allowed, in metres" />
-                    <span class="unit">m</span>
-                </div>
-                <button class="quiet" id="clear-orbit">Clear orbit limits</button>
-            </section>
-
-            <section id="walk-tools" hidden>
-                <h2>Walls</h2>
-                <p class="hint">
-                    The collision already stops visitors at buildings, planters and walls. Close the
-                    openings you don't want them to use: walk into one, face out of the area, and press
-                    Block this way. The wall reaches sideways until it meets something on each side.
-                    Walls and the fence stop the orbit camera too: visitors cannot zoom, pan or turn
-                    it through them.
-                </p>
-                <div class="row">
-                    <button id="block-way">Block this way</button>
-                    <button class="quiet" id="clear-walls">Clear walls</button>
-                </div>
-                <ol id="walls"></ol>
-                <p class="hint">
-                    Walls and the fence are off while you edit (the orange panels show where they are).
-                    Press Try as a visitor to walk into them.
-                </p>
-                <h2>Fence (simple areas)</h2>
-                <p class="hint">
-                    Or walk to each corner of the area, in order around it, and add a corner there.
-                    Three or more make a fence.
-                </p>
-                <div class="row">
-                    <button id="add-corner">Add corner here</button>
-                    <button class="quiet" id="undo-corner">Remove last</button>
-                    <button class="quiet" id="clear-fence">Clear</button>
-                </div>
-                <output id="out-fence"></output>
-            </section>
-
             <section id="box-tools">
                 <h2>Boundary box</h2>
                 <p class="hint">
-                    Visitors' cameras stay inside the box in every mode: they cannot orbit, zoom, pan,
-                    walk or fly out of it. Use it where the splat's edges or stray floaters let them
-                    get away. Add one where you are, then drag its handles.
+                    The edge of the scene. Visitors who push past it meet a soft resistance and ease
+                    back in when they let go, in every mode. Add one where you are, then drag its
+                    handles to fit the part of the splat that holds up.
                 </p>
                 <div class="row">
                     <button id="box-add">Add a box here</button>
@@ -155,6 +86,75 @@
                 <ol id="annotations"></ol>
             </section>
 
+            <details id="advanced">
+                <summary>Advanced</summary>
+                <section>
+                    <h2>Camera modes</h2>
+                    <div class="segmented" role="group" aria-label="Camera modes for visitors">
+                        <label><input type="checkbox" name="modes" value="orbit" /> Orbit</label>
+                        <label><input type="checkbox" name="modes" value="walk" /> Walk</label>
+                        <label><input type="checkbox" name="modes" value="fly" /> Fly</label>
+                    </div>
+                    <div class="row" id="start-row">
+                        <label for="start-mode">Starts in</label>
+                        <select id="start-mode"></select>
+                    </div>
+                    <p class="hint" id="mode-hint"></p>
+                </section>
+                <section>
+                    <h2>Bumps into the scene</h2>
+                    <p class="hint">Walking always does. The others float, so small things like plants do not get in the way.</p>
+                    <label class="check"><input type="checkbox" id="collide-orbit" /> Orbit camera</label>
+                    <label class="check"><input type="checkbox" id="collide-fly" /> Flying</label>
+                </section>
+                <section id="walk-tools">
+                    <h2>Walls</h2>
+                    <p class="hint">
+                        Close openings you don't want walkers to use: walk into one, face out of the
+                        area, and press Block this way. The wall reaches sideways until it meets
+                        something on each side. Press Try as a visitor to walk into them.
+                    </p>
+                    <div class="row">
+                        <button id="block-way">Block this way</button>
+                        <button class="quiet" id="clear-walls">Clear walls</button>
+                    </div>
+                    <ol id="walls"></ol>
+                    <label class="check"><input type="checkbox" id="walls-orbit" /> Walls also stop the orbit camera</label>
+                    <div id="old-fence" class="row">
+                        <output id="out-fence"></output>
+                        <button class="quiet" id="clear-fence">Remove the fence</button>
+                    </div>
+                </section>
+                <section id="orbit-tools">
+                    <h2>Orbit limits</h2>
+                    <p class="hint">Move the view to the edge you want, then press the matching button.</p>
+                    <div class="grid">
+                        <span>Turn</span>
+                        <button data-mark="left">Left edge here</button>
+                        <button data-mark="right">Right edge here</button>
+                        <output id="out-yaw"></output>
+                        <span>Tilt</span>
+                        <button data-mark="low">Lowest here</button>
+                        <button data-mark="high">Highest here</button>
+                        <output id="out-pitch"></output>
+                        <span>Zoom</span>
+                        <button data-mark="near">Closest here</button>
+                        <button data-mark="far">Furthest here</button>
+                        <output id="out-distance"></output>
+                    </div>
+                    <div class="row">
+                        <label for="pan">Panning</label>
+                        <select id="pan">
+                            <option value="free">Free</option>
+                            <option value="locked">Locked</option>
+                            <option value="box">Near the current focus</option>
+                        </select>
+                        <input id="pan-margin" type="number" min="0.1" step="0.1" value="1" aria-label="Distance allowed, in metres" />
+                        <span class="unit">m</span>
+                    </div>
+                    <button class="quiet" id="clear-orbit">Clear orbit limits</button>
+                </section>
+            </details>
             <section class="actions">
                 <button id="preview" aria-pressed="false">Try as a visitor</button>
                 <button id="download-limits">Download limits</button>
