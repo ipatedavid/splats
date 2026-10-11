@@ -126,13 +126,7 @@ const buildLimits = () => {
     }
     limits.preset = presetOf();
     limits.collision = { ...draft.collision };
-    if (draft.box) {
-        limits.box = {
-            center: draft.box.center.map((v) => round(v, 3)),
-            size: draft.box.size.map((v) => round(v, 3)),
-            yaw: round(draft.box.yaw ?? 0, 1)
-        };
-    }
+    limits.edge = draft.edge;
     // walls and the fence hold walking and the orbit camera
     if (modes.includes('walk') || modes.includes('orbit')) {
         const walk = {};
@@ -184,7 +178,8 @@ const restartViewer = async () => {
     });
     window.viewer = viewer;
     drawWalls();
-    drawBox();
+    // the edge is found from the splat, so its size shows once that has loaded
+    viewer.events.on('loaded:changed', (loaded) => loaded && setTimeout(() => ($('#out-edge').textContent = describeEdge()), 1500));
     // Skip the intro animation: it would swallow the first button press, and dragging during it
     // drops into fly mode with the mouse captured. The camera is set up once the scene has
     // loaded, so switch then.
@@ -203,18 +198,18 @@ const restartViewer = async () => {
 
 const pose = () => viewer?.cameraPose();
 
-// The boundary box with its handles, while editing only.
-const describeBox = (box) =>
-    box
-        ? `${box.size.map((v) => round(v, 1)).join(' × ')} m, turned ${round(box.yaw ?? 0, 0)}°`
-        : 'No box yet: nothing holds visitors at the edge of the splat.';
-const drawBox = () => {
-    if (!viewer?.editBox) return;
-    viewer.editBox(previewing ? null : draft.box, draft.boxTool, (box) => {
-        draft.box = box;
-        saveDraft();
-        $('#out-box').textContent = describeBox(box);
-    });
+// The scene edge, computed by the viewer from the splat; shown for a moment when it changes.
+const currentEdge = () => (draft.edge === 'off' ? null : (viewer?.sceneEdge?.(draft.edge) ?? null));
+const describeEdge = () => {
+    if (draft.edge === 'off') return 'Off: nothing holds visitors at the edge of the splat.';
+    const box = currentEdge();
+    return box ? `${box.size.map((v) => round(v, 1)).join(' × ')} m around the dense part` : 'Found once the splat has loaded.';
+};
+let edgeTimer = 0;
+const previewEdge = () => {
+    clearTimeout(edgeTimer);
+    viewer?.showEdge?.(currentEdge());
+    edgeTimer = setTimeout(() => viewer?.showEdge?.(null), 4000);
 };
 
 // The walls as orange panels, while editing only (visitors never see them).
@@ -319,15 +314,10 @@ const render = () => {
         ? `fixed at ${draft.orbitTarget.map((v) => round(v, 2)).join(', ')}`
         : 'not fixed: visitors can pan and click a new point';
     $('#pan').disabled = Boolean(draft.orbitTarget);
-    for (const input of document.querySelectorAll('input[name="box-tool"]')) {
-        input.checked = input.value === draft.boxTool;
-        input.disabled = !draft.box;
+    for (const input of document.querySelectorAll('input[name="edge"]')) {
+        input.checked = input.value === draft.edge;
     }
-    $('#box-remove').hidden = !draft.box;
-    $('#box-tool').hidden = !draft.box;
-    $('#box-add').textContent = draft.box ? 'Move the box here' : 'Add a box here';
-    $('#out-box').textContent = describeBox(draft.box);
-    drawBox();
+    $('#out-edge').textContent = describeEdge();
 
     const m = draft.marks;
     const partial = (a, b) => (a !== undefined && b === undefined) || (a === undefined && b !== undefined);
@@ -512,16 +502,17 @@ const annotationLimitsControls = (annotation, index) => {
 const annotationWarning = (annotation, limits) => {
     const view = annotation.extras?.view;
     const own = annotation.extras?.limits ?? {};
-    // the flight to an annotation's view is not held by the box: keep the view inside it
+    // the flight to an annotation's view is not held by the edge: keep the view inside it
     const from = annotation.camera?.initial?.position;
-    if (from && limits.box) {
-        const { center, size, yaw = 0 } = limits.box;
+    const edge = currentEdge();
+    if (from && edge) {
+        const { center, size, yaw = 0 } = edge;
         const t = (yaw * Math.PI) / 180;
         const dx = from[0] - center[0];
         const dz = from[2] - center[2];
         const local = [dx * Math.cos(t) - dz * Math.sin(t), from[1] - center[1], dx * Math.sin(t) + dz * Math.cos(t)];
         if (local.some((v, i) => Math.abs(v) > size[i] / 2)) {
-            return 'Its view is outside the boundary box; re-save it from inside, or grow the box.';
+            return 'Its view is outside the scene edge; re-save it from inside, or loosen the edge.';
         }
     }
     if (view && (view.distance < (own.closest ?? 0) * 0.98 || view.distance > (own.furthest ?? Infinity) * 1.02)) {
@@ -576,26 +567,12 @@ const wire = () => {
             viewer.state.cameraMode = 'walk';
         }
     });
-    $('#box-add').addEventListener('click', () => {
-        const p = pose();
-        // around the camera when walking or flying, around the subject when orbiting
-        const centre = p.mode === 'orbit' ? p.focus : p.position;
-        draft.box = { center: centre, size: draft.box?.size ?? [6, 3, 6], yaw: round(p.angles[1], 1) };
-        draft.boxTool ??= 'move';
-        saveDraft();
-        render();
-        setStatus('Box placed. Drag its arrows to move it; switch to Resize or Turn for the other handles.');
-    });
-    $('#box-remove').addEventListener('click', () => {
-        draft.box = null;
-        saveDraft();
-        render();
-    });
-    for (const input of document.querySelectorAll('input[name="box-tool"]')) {
+    for (const input of document.querySelectorAll('input[name="edge"]')) {
         input.addEventListener('change', () => {
-            draft.boxTool = input.value;
+            draft.edge = input.value;
             saveDraft();
             render();
+            previewEdge();
         });
     }
     $('#orbit-point').addEventListener('click', () => {
@@ -851,8 +828,7 @@ const draftFrom = (limits, settings) => {
         orbitTarget: orbit?.target ?? null,
         collision: { orbit: limits?.collision?.orbit ?? false, fly: limits?.collision?.fly ?? true },
         holdOrbit: Boolean(limits?.walk?.holdOrbit),
-        box: limits?.box ?? null,
-        boxTool: 'move',
+        edge: limits?.edge ?? 'normal',
         marks,
         pan: orbit?.pan === false ? 'locked' : Array.isArray(orbit?.pan) ? 'box' : 'free',
         panBox: Array.isArray(orbit?.pan) ? orbit.pan : null,
@@ -879,10 +855,9 @@ if (!folder) {
             draft = saved;
             draft.modes ??= draft.mode ? [draft.mode] : [...MODES];
             draft.orbitTarget ??= null;
-            draft.box ??= null;
+            draft.edge ??= 'normal';
             draft.collision ??= { orbit: false, fly: true };
             draft.holdOrbit ??= false;
-            draft.boxTool ??= 'move';
             setStatus('Continuing your unsaved draft from last time.');
         } else {
             draft = draftFrom(scene.limits, structuredClone(scene.settings));

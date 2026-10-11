@@ -37,23 +37,20 @@
                     <output id="out-orbit-point"></output>
                 </div>
             </section>
-            <section id="box-tools">
-                <h2>Boundary box</h2>
+            <section id="edge-tools">
+                <h2>Scene edge</h2>
+                <div class="segmented" role="radiogroup" aria-label="Scene edge">
+                    <label><input type="radio" name="edge" value="off" /> Off</label>
+                    <label><input type="radio" name="edge" value="loose" /> Loose</label>
+                    <label><input type="radio" name="edge" value="normal" /> Normal</label>
+                    <label><input type="radio" name="edge" value="tight" /> Tight</label>
+                </div>
                 <p class="hint">
-                    The edge of the scene. Visitors who push past it meet a soft resistance and ease
-                    back in when they let go, in every mode. Add one where you are, then drag its
-                    handles to fit the part of the splat that holds up.
+                    Found from the splat itself: a box around its dense part, leaving stray floaters
+                    out. Visitors who push past it meet a soft resistance and ease back in when they
+                    let go. Tight trims more of the outskirts; changing it shows the edge for a moment.
                 </p>
-                <div class="row">
-                    <button id="box-add">Add a box here</button>
-                    <button class="quiet" id="box-remove">Remove</button>
-                </div>
-                <div class="segmented" id="box-tool" role="radiogroup" aria-label="Box handles">
-                    <label><input type="radio" name="box-tool" value="move" /> Move</label>
-                    <label><input type="radio" name="box-tool" value="resize" /> Resize</label>
-                    <label><input type="radio" name="box-tool" value="turn" /> Turn</label>
-                </div>
-                <output id="out-box"></output>
+                <output id="out-edge"></output>
             </section>
             <section>
                 <h2>Start view</h2>

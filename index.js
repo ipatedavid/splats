@@ -3765,58 +3765,6 @@ class Ray {
 	}
 }
 
-const e1 = new Vec3();
-const e2 = new Vec3();
-const h = new Vec3();
-const s = new Vec3();
-const q$2 = new Vec3();
-const EPSILON = 1e-6;
-class Tri {
-	v0 = new Vec3();
-	v1 = new Vec3();
-	v2 = new Vec3();
-	constructor(v0 = Vec3.ZERO, v1 = Vec3.ZERO, v2 = Vec3.ZERO) {
-		this.set(v0, v1, v2);
-	}
-	set(v0, v1, v2) {
-		this.v0.copy(v0);
-		this.v1.copy(v1);
-		this.v2.copy(v2);
-		return this;
-	}
-	intersectsRay(ray, point) {
-		e1.sub2(this.v1, this.v0);
-		e2.sub2(this.v2, this.v0);
-		h.cross(ray.direction, e2);
-		const a = e1.dot(h);
-		if (a > -EPSILON && a < EPSILON) {
-			return false;
-		}
-		const f = 1 / a;
-		s.sub2(ray.origin, this.v0);
-		const u = f * s.dot(h);
-		if (u < 0 || u > 1) {
-			return false;
-		}
-		q$2.cross(s, e1);
-		const v = f * ray.direction.dot(q$2);
-		if (v < 0 || u + v > 1) {
-			return false;
-		}
-		const t = f * e2.dot(q$2);
-		if (t > EPSILON) {
-			if (point instanceof Vec3) {
-				point.copy(ray.direction).mulScalar(t).add(ray.origin);
-			}
-			return true;
-		}
-		return false;
-	}
-	toString() {
-		return `[${this.v0.toString()}, ${this.v1.toString()}, ${this.v2.toString()}]`;
-	}
-}
-
 const ADDRESS_REPEAT = 0;
 const ADDRESS_CLAMP_TO_EDGE = 1;
 const ADDRESS_MIRRORED_REPEAT = 2;
@@ -20799,9 +20747,9 @@ const scaleCompensateScale = new Vec3();
 const scaleCompensateScaleForParent = new Vec3();
 const tmpMat4 = new Mat4();
 const tmpQuat$1 = new Quat();
-const position$1 = new Vec3();
+const position = new Vec3();
 const invParentWtm = new Mat4();
-const rotation$5 = new Quat();
+const rotation$4 = new Quat();
 const invParentRot = new Quat();
 const matrix = new Mat4();
 const target = new Vec3();
@@ -21214,15 +21162,15 @@ class GraphNode extends EventHandler {
 	}
 	setPosition(x, y, z) {
 		if (x instanceof Vec3) {
-			position$1.copy(x);
+			position.copy(x);
 		} else {
-			position$1.set(x, y, z);
+			position.set(x, y, z);
 		}
 		if (this._parent === null) {
-			this.localPosition.copy(position$1);
+			this.localPosition.copy(position);
 		} else {
 			invParentWtm.copy(this._parent.getWorldTransform()).invert();
-			invParentWtm.transformPoint(position$1, this.localPosition);
+			invParentWtm.transformPoint(position, this.localPosition);
 		}
 		if (!this._dirtyLocal) {
 			this._dirtifyLocal();
@@ -21230,16 +21178,16 @@ class GraphNode extends EventHandler {
 	}
 	setRotation(x, y, z, w) {
 		if (x instanceof Quat) {
-			rotation$5.copy(x);
+			rotation$4.copy(x);
 		} else {
-			rotation$5.set(x, y, z, w);
+			rotation$4.set(x, y, z, w);
 		}
 		if (this._parent === null) {
-			this.localRotation.copy(rotation$5);
+			this.localRotation.copy(rotation$4);
 		} else {
 			const parentRot = this._parent.getRotation();
 			invParentRot.copy(parentRot).invert();
-			this.localRotation.copy(invParentRot).mul(rotation$5);
+			this.localRotation.copy(invParentRot).mul(rotation$4);
 		}
 		if (!this._dirtyLocal) {
 			this._dirtifyLocal();
@@ -21408,48 +21356,48 @@ class GraphNode extends EventHandler {
 			up$2.set(ux, uy, uz);
 		}
 		matrix.setLookAt(this.getPosition(), target, up$2);
-		rotation$5.setFromMat4(matrix);
-		this.setRotation(rotation$5);
+		rotation$4.setFromMat4(matrix);
+		this.setRotation(rotation$4);
 	}
 	translate(x, y, z) {
 		if (x instanceof Vec3) {
-			position$1.copy(x);
+			position.copy(x);
 		} else {
-			position$1.set(x, y, z);
+			position.set(x, y, z);
 		}
-		position$1.add(this.getPosition());
-		this.setPosition(position$1);
+		position.add(this.getPosition());
+		this.setPosition(position);
 	}
 	translateLocal(x, y, z) {
 		if (x instanceof Vec3) {
-			position$1.copy(x);
+			position.copy(x);
 		} else {
-			position$1.set(x, y, z);
+			position.set(x, y, z);
 		}
-		this.localRotation.transformVector(position$1, position$1);
-		this.localPosition.add(position$1);
+		this.localRotation.transformVector(position, position);
+		this.localPosition.add(position);
 		if (!this._dirtyLocal) {
 			this._dirtifyLocal();
 		}
 	}
 	rotate(x, y, z) {
-		rotation$5.setFromEulerAngles(x, y, z);
+		rotation$4.setFromEulerAngles(x, y, z);
 		if (this._parent === null) {
-			this.localRotation.mul2(rotation$5, this.localRotation);
+			this.localRotation.mul2(rotation$4, this.localRotation);
 		} else {
 			const rot = this.getRotation();
 			const parentRot = this._parent.getRotation();
 			invParentRot.copy(parentRot).invert();
-			rotation$5.mul2(invParentRot, rotation$5);
-			this.localRotation.mul2(rotation$5, rot);
+			rotation$4.mul2(invParentRot, rotation$4);
+			this.localRotation.mul2(rotation$4, rot);
 		}
 		if (!this._dirtyLocal) {
 			this._dirtifyLocal();
 		}
 	}
 	rotateLocal(x, y, z) {
-		rotation$5.setFromEulerAngles(x, y, z);
-		this.localRotation.mul(rotation$5);
+		rotation$4.setFromEulerAngles(x, y, z);
+		this.localRotation.mul(rotation$4);
 		if (!this._dirtyLocal) {
 			this._dirtifyLocal();
 		}
@@ -83482,8 +83430,8 @@ class CameraFrame {
 	}
 }
 
-const tmpV1$5 = new Vec3();
-const rotation$4 = new Quat();
+const tmpV1$1 = new Vec3();
+const rotation$3 = new Quat();
 class Pose {
 	position = new Vec3();
 	angles = new Vec3();
@@ -83538,14 +83486,14 @@ class Pose {
 	look(from, to) {
 		this.position.copy(from);
 		this.distance = from.distance(to);
-		const dir = tmpV1$5.sub2(to, from).normalize();
+		const dir = tmpV1$1.sub2(to, from).normalize();
 		const elev = Math.atan2(-dir.y, Math.sqrt(dir.x * dir.x + dir.z * dir.z)) * math.RAD_TO_DEG;
 		const azim = Math.atan2(-dir.x, -dir.z) * math.RAD_TO_DEG;
 		this.angles.set(-elev, azim, 0);
 		return this;
 	}
 	getFocus(out) {
-		return rotation$4.setFromEulerAngles(this.angles).transformVector(Vec3.FORWARD, out).mulScalar(this.distance).add(this.position);
+		return rotation$3.setFromEulerAngles(this.angles).transformVector(Vec3.FORWARD, out).mulScalar(this.distance).add(this.position);
 	}
 }
 
@@ -84069,10 +84017,10 @@ class GamepadSource extends InputSource {
 
 const damp$2 = (damping, dt) => 1 - Math.pow(damping, dt * 1e3);
 
-const dir$1 = new Vec3();
+const dir = new Vec3();
 const offset$2 = new Vec3();
 const angles = new Vec3();
-const rotation$3 = new Quat();
+const rotation$2 = new Quat();
 let OrbitController$1 = class OrbitController extends InputController$1 {
 	_targetRootPose = new Pose();
 	_rootPose = new Pose();
@@ -84103,7 +84051,7 @@ let OrbitController$1 = class OrbitController extends InputController$1 {
 		return this._targetRootPose.zRange;
 	}
 	attach(pose, smooth = true) {
-		this._targetRootPose.set(pose.getFocus(dir$1), pose.angles, 0);
+		this._targetRootPose.set(pose.getFocus(dir), pose.angles, 0);
 		this._targetChildPose.position.set(0, 0, pose.distance);
 		if (!smooth) {
 			this._rootPose.copy(this._targetRootPose);
@@ -84117,7 +84065,7 @@ let OrbitController$1 = class OrbitController extends InputController$1 {
 	update(frame, dt) {
 		const { move, rotate } = frame.read();
 		offset$2.set(move[0], move[1], 0);
-		rotation$3.setFromEulerAngles(this._rootPose.angles).transformVector(offset$2, offset$2);
+		rotation$2.setFromEulerAngles(this._rootPose.angles).transformVector(offset$2, offset$2);
 		this._targetRootPose.move(offset$2);
 		const { z: dist } = this._targetChildPose.position;
 		this._targetChildPose.move(offset$2.set(0, 0, dist * (1 + move[2]) - dist));
@@ -84136,2461 +84084,13 @@ let OrbitController$1 = class OrbitController extends InputController$1 {
 			1,
 			1
 		);
-		rotation$3.setFromEulerAngles(this._rootPose.angles).transformVector(this._childPose.position, offset$2).add(this._rootPose.position);
+		rotation$2.setFromEulerAngles(this._rootPose.angles).transformVector(this._childPose.position, offset$2).add(this._rootPose.position);
 		return this._pose.set(offset$2, this._rootPose.angles, this._childPose.position.z);
 	}
 	destroy() {
 		this.detach();
 	}
 };
-
-const v$2 = new Vec3();
-const position = new Vec3();
-const dir = new Vec3();
-const rotation$2 = new Quat();
-const m1 = new Mat4();
-const m2 = new Mat4();
-const ray$1 = new Ray();
-const MIN_SCALE = 1e-4;
-const PERS_SCALE_RATIO = 0.3;
-const ORTHO_SCALE_RATIO = 0.32;
-const UPDATE_EPSILON$2 = 1e-6;
-const DIST_EPSILON = 1e-4;
-class Gizmo extends EventHandler {
-	static EVENT_POINTERDOWN = "pointer:down";
-	static EVENT_POINTERMOVE = "pointer:move";
-	static EVENT_POINTERUP = "pointer:up";
-	static EVENT_POSITIONUPDATE = "position:update";
-	static EVENT_ROTATIONUPDATE = "rotation:update";
-	static EVENT_SCALEUPDATE = "scale:update";
-	static EVENT_NODESATTACH = "nodes:attach";
-	static EVENT_NODESDETACH = "nodes:detach";
-	static EVENT_RENDERUPDATE = "render:update";
-	_size = 1;
-	_scale = 1;
-	_coordSpace = "world";
-	_app;
-	_device;
-	_handles = [];
-	_mouseButtons = [true, true, true];
-	_camera;
-	_layer;
-	_renderUpdate = false;
-	nodes = [];
-	root;
-	intersectShapes = [];
-	preventDefault = true;
-	static createLayer(app, layerName = "Gizmo", layerIndex = app.scene.layers.layerList.length) {
-		const layer = new Layer({
-			name: layerName,
-			clearDepthBuffer: true,
-			opaqueSortMode: SORTMODE_NONE,
-			transparentSortMode: SORTMODE_NONE
-		});
-		app.scene.layers.insert(layer, layerIndex);
-		return layer;
-	}
-	constructor(camera, layer, name = "gizmo") {
-		super();
-		this._layer = layer;
-		this._camera = camera;
-		this._camera.layers = this._camera.layers.concat(this._layer.id);
-		this._app = this._camera.system.app;
-		this._device = this._app.graphicsDevice;
-		this.root = new Entity(name);
-		this._app.root.addChild(this.root);
-		this.root.enabled = false;
-		this._updateScale();
-		this._onPointerDown = this._onPointerDown.bind(this);
-		this._onPointerMove = this._onPointerMove.bind(this);
-		this._onPointerUp = this._onPointerUp.bind(this);
-		this._device.canvas.addEventListener("pointerdown", this._onPointerDown);
-		this._device.canvas.addEventListener("pointermove", this._onPointerMove);
-		this._device.canvas.addEventListener("pointerup", this._onPointerUp);
-		this._handles.push(this._app.on("prerender", () => this.prerender()));
-		this._handles.push(this._app.on("update", () => this.update()));
-		this._handles.push(this._app.on("destroy", () => this.destroy()));
-	}
-	set enabled(state) {
-		const cameraDist = this.root.getLocalPosition().distance(this.camera.entity.getPosition());
-		const enabled = state ? this.nodes.length > 0 && cameraDist > DIST_EPSILON : false;
-		if (enabled !== this.root.enabled) {
-			this.root.enabled = enabled;
-			this._renderUpdate = true;
-		}
-	}
-	get enabled() {
-		return this.root.enabled;
-	}
-	get mouseButtons() {
-		return this._mouseButtons;
-	}
-	set layer(layer) {
-		if (this._layer === layer) {
-			return;
-		}
-		this._camera.layers = this._camera.layers.filter((id) => id !== this._layer.id);
-		this._layer = layer;
-		this._camera.layers = this._camera.layers.concat(this._layer.id);
-		this.enabled = true;
-	}
-	get layer() {
-		return this._layer;
-	}
-	set camera(camera) {
-		if (this._camera === camera) {
-			return;
-		}
-		this._camera.layers = this._camera.layers.filter((id) => id !== this._layer.id);
-		this._camera = camera;
-		this._camera.layers = this._camera.layers.concat(this._layer.id);
-		this.enabled = true;
-	}
-	get camera() {
-		return this._camera;
-	}
-	set coordSpace(value) {
-		this._coordSpace = value ?? this._coordSpace;
-		this._updateRotation();
-	}
-	get coordSpace() {
-		return this._coordSpace;
-	}
-	set size(value) {
-		this._size = value;
-		this._updateScale();
-	}
-	get size() {
-		return this._size;
-	}
-	get facingDir() {
-		if (this._camera.projection === PROJECTION_PERSPECTIVE) {
-			const gizmoPos = this.root.getLocalPosition();
-			const cameraPos = this._camera.entity.getPosition();
-			return dir.sub2(cameraPos, gizmoPos).normalize();
-		}
-		return dir.copy(this._camera.entity.forward).mulScalar(-1);
-	}
-	get cameraDir() {
-		const cameraPos = this._camera.entity.getPosition();
-		const gizmoPos = this.root.getLocalPosition();
-		return dir.sub2(cameraPos, gizmoPos).normalize();
-	}
-	_onPointerDown(e) {
-		if (!this.enabled || document.pointerLockElement) {
-			return;
-		}
-		if (!this.mouseButtons[e.button]) {
-			return;
-		}
-		const selection = this._getSelection(e.offsetX, e.offsetY);
-		if (selection[0]) {
-			if (this.preventDefault) {
-				e.preventDefault();
-			}
-			e.stopPropagation();
-		}
-		const { canvas } = this._device;
-		canvas.setPointerCapture(e.pointerId);
-		this.fire(Gizmo.EVENT_POINTERDOWN, e.offsetX, e.offsetY, selection[0]);
-	}
-	_onPointerMove(e) {
-		if (!this.enabled || document.pointerLockElement) {
-			return;
-		}
-		const selection = this._getSelection(e.offsetX, e.offsetY);
-		if (selection[0]) {
-			if (this.preventDefault) {
-				e.preventDefault();
-			}
-			e.stopPropagation();
-		}
-		this.fire(Gizmo.EVENT_POINTERMOVE, e.offsetX, e.offsetY, selection[0]);
-	}
-	_onPointerUp(e) {
-		if (!this.enabled || document.pointerLockElement) {
-			return;
-		}
-		if (!this.mouseButtons[e.button]) {
-			return;
-		}
-		const selection = this._getSelection(e.offsetX, e.offsetY);
-		if (selection[0]) {
-			if (this.preventDefault) {
-				e.preventDefault();
-			}
-			e.stopPropagation();
-		}
-		const { canvas } = this._device;
-		canvas.releasePointerCapture(e.pointerId);
-		this.fire(Gizmo.EVENT_POINTERUP, e.offsetX, e.offsetY, selection[0]);
-	}
-	_updatePosition() {
-		position.set(0, 0, 0);
-		if (this._coordSpace === "local") {
-			position.copy(this.nodes[this.nodes.length - 1].getPosition());
-		} else {
-			for (let i = 0; i < this.nodes.length; i++) {
-				const node = this.nodes[i];
-				position.add(node.getPosition());
-			}
-			position.mulScalar(1 / (this.nodes.length || 1));
-		}
-		if (position.equalsApprox(this.root.getLocalPosition(), UPDATE_EPSILON$2)) {
-			return;
-		}
-		this.root.setLocalPosition(position);
-		this.fire(Gizmo.EVENT_POSITIONUPDATE, position);
-		this._renderUpdate = true;
-	}
-	_updateRotation() {
-		rotation$2.set(0, 0, 0, 1);
-		if (this._coordSpace === "local" && this.nodes.length !== 0) {
-			rotation$2.copy(this.nodes[this.nodes.length - 1].getRotation());
-		}
-		if (rotation$2.equalsApprox(this.root.getRotation(), UPDATE_EPSILON$2)) {
-			return;
-		}
-		this.root.setRotation(rotation$2);
-		this.fire(Gizmo.EVENT_ROTATIONUPDATE, rotation$2.getEulerAngles());
-		this._renderUpdate = true;
-	}
-	_updateScale() {
-		if (this._camera.projection === PROJECTION_PERSPECTIVE) {
-			const gizmoPos = this.root.getLocalPosition();
-			const cameraPos = this._camera.entity.getPosition();
-			const dist = v$2.sub2(gizmoPos, cameraPos).dot(this._camera.entity.forward);
-			this._scale = Math.tan(0.5 * this._camera.fov * math.DEG_TO_RAD) * dist * PERS_SCALE_RATIO;
-		} else {
-			this._scale = this._camera.orthoHeight * ORTHO_SCALE_RATIO;
-		}
-		this._scale = Math.max(this._scale * this._size, MIN_SCALE);
-		if (Math.abs(this._scale - this.root.getLocalScale().x) < UPDATE_EPSILON$2) {
-			return;
-		}
-		this.root.setLocalScale(this._scale, this._scale, this._scale);
-		this.fire(Gizmo.EVENT_SCALEUPDATE, this._scale);
-		this._renderUpdate = true;
-	}
-	_getSelection(x, y) {
-		const start = this._camera.screenToWorld(x, y, 0);
-		const end = this._camera.screenToWorld(x, y, this._camera.farClip - this._camera.nearClip);
-		const dir2 = v$2.copy(end).sub(start).normalize();
-		const selection = [];
-		for (let i = 0; i < this.intersectShapes.length; i++) {
-			const shape = this.intersectShapes[i];
-			if (shape.disabled || !shape.entity.enabled) {
-				continue;
-			}
-			const parentTM = shape.entity.getWorldTransform();
-			for (let j = 0; j < shape.triData.length; j++) {
-				const { tris, transform, priority } = shape.triData[j];
-				const triWTM = m1.copy(parentTM).mul(transform);
-				const invTriWTM = m2.copy(triWTM).invert();
-				invTriWTM.transformPoint(start, ray$1.origin);
-				invTriWTM.transformVector(dir2, ray$1.direction);
-				ray$1.direction.normalize();
-				for (let k = 0; k < tris.length; k++) {
-					if (tris[k].intersectsRay(ray$1, v$2)) {
-						selection.push({
-							dist: triWTM.transformPoint(v$2).sub(start).length(),
-							meshInstances: shape.meshInstances,
-							priority
-						});
-					}
-				}
-			}
-		}
-		if (selection.length) {
-			selection.sort((s0, s1) => {
-				if (s0.priority !== 0 && s1.priority !== 0) {
-					return s1.priority - s0.priority;
-				}
-				return s0.dist - s1.dist;
-			});
-			return selection[0].meshInstances;
-		}
-		return [];
-	}
-	attach(nodes = []) {
-		if (Array.isArray(nodes)) {
-			if (nodes.length === 0) {
-				return;
-			}
-			this.nodes = nodes;
-		} else {
-			this.nodes = [nodes];
-		}
-		this._updatePosition();
-		this._updateRotation();
-		this._updateScale();
-		this.fire(Gizmo.EVENT_NODESATTACH);
-		this.enabled = true;
-	}
-	detach() {
-		this.enabled = false;
-		this.fire(Gizmo.EVENT_NODESDETACH);
-		this.nodes = [];
-	}
-	prerender() {
-	}
-	update() {
-		if (this._renderUpdate) {
-			this._renderUpdate = false;
-			this.fire(Gizmo.EVENT_RENDERUPDATE);
-		}
-		if (!this.enabled) {
-			return;
-		}
-		this._updatePosition();
-		this._updateRotation();
-		this._updateScale();
-	}
-	destroy() {
-		this.detach();
-		this._device.canvas.removeEventListener("pointerdown", this._onPointerDown);
-		this._device.canvas.removeEventListener("pointermove", this._onPointerMove);
-		this._device.canvas.removeEventListener("pointerup", this._onPointerUp);
-		this._handles.forEach((handle) => handle.off());
-		this.root.destroy();
-	}
-}
-
-const COLOR_RED = Object.freeze(new Color(1, 0.3, 0.3));
-const COLOR_GREEN = Object.freeze(new Color(0.3, 1, 0.3));
-const COLOR_BLUE = Object.freeze(new Color(0.3, 0.3, 1));
-Object.freeze(new Color(1, 1, 0.5));
-const COLOR_GRAY = Object.freeze(new Color(0.5, 0.5, 0.5, 0.5));
-const color4from3 = (color, a) => {
-	return new Color(color.r, color.g, color.b, a);
-};
-
-const v1$3 = new Vec3();
-const v2$3 = new Vec3();
-const point$3 = new Vec3();
-const ray = new Ray();
-const plane = new Plane();
-const color$1 = new Color();
-const AXES$2 = ["x", "y", "z"];
-class TransformGizmo extends Gizmo {
-	static EVENT_TRANSFORMSTART = "transform:start";
-	static EVENT_TRANSFORMMOVE = "transform:move";
-	static EVENT_TRANSFORMEND = "transform:end";
-	_theme = {
-		shapeBase: {
-			x: COLOR_RED.clone(),
-			y: COLOR_GREEN.clone(),
-			z: COLOR_BLUE.clone(),
-			xyz: new Color(0.8, 0.8, 0.8, 1),
-			f: new Color(0.8, 0.8, 0.8, 1)
-		},
-		shapeHover: {
-			x: new Color().lerp(COLOR_RED, Color.WHITE, 0.75),
-			y: new Color().lerp(COLOR_GREEN, Color.WHITE, 0.75),
-			z: new Color().lerp(COLOR_BLUE, Color.WHITE, 0.75),
-			xyz: Color.WHITE.clone(),
-			f: Color.WHITE.clone()
-		},
-		guideBase: {
-			x: COLOR_RED.clone(),
-			y: COLOR_GREEN.clone(),
-			z: COLOR_BLUE.clone()
-		},
-		guideOcclusion: 0.8,
-		disabled: COLOR_GRAY.clone()
-	};
-	_rootStartPos = new Vec3();
-	_rootStartRot = new Quat();
-	_shapes = {};
-	_shapeMap = /* @__PURE__ */ new Map();
-	_hovering = /* @__PURE__ */ new Set();
-	_hoverAxis = "";
-	_hoverIsPlane = false;
-	_selectedAxis = "";
-	_selectedIsPlane = false;
-	_selectionStartPoint = new Vec3();
-	snap = false;
-	snapIncrement = 1;
-	dragMode = "selected";
-	constructor(camera, layer, name = "gizmo:transform") {
-		super(camera, layer, name);
-		this.on(Gizmo.EVENT_POINTERDOWN, (x, y, meshInstance) => {
-			const shape = this._shapeMap.get(meshInstance);
-			if (shape?.disabled) {
-				return;
-			}
-			if (this._dragging) {
-				return;
-			}
-			if (!meshInstance) {
-				return;
-			}
-			this._hoverAxis = "";
-			this._hoverIsPlane = false;
-			this._selectedAxis = this._getAxis(meshInstance);
-			this._selectedIsPlane = this._getIsPlane(meshInstance);
-			this._rootStartPos.copy(this.root.getLocalPosition());
-			this._rootStartRot.copy(this.root.getRotation());
-			const point2 = this._screenToPoint(x, y);
-			this._selectionStartPoint.copy(point2);
-			this.fire(TransformGizmo.EVENT_TRANSFORMSTART, point2, x, y);
-		});
-		this.on(Gizmo.EVENT_POINTERMOVE, (x, y, meshInstance) => {
-			const shape = this._shapeMap.get(meshInstance);
-			if (shape?.disabled) {
-				return;
-			}
-			this._hover(meshInstance);
-			if (!this._dragging) {
-				return;
-			}
-			const point2 = this._screenToPoint(x, y);
-			this.fire(TransformGizmo.EVENT_TRANSFORMMOVE, point2, x, y);
-		});
-		this.on(Gizmo.EVENT_POINTERUP, (_x, _y, meshInstance) => {
-			this._hover(meshInstance);
-			if (!this._dragging) {
-				return;
-			}
-			if (meshInstance) {
-				this._hoverAxis = this._selectedAxis;
-				this._hoverIsPlane = this._selectedIsPlane;
-			}
-			this._selectedAxis = "";
-			this._selectedIsPlane = false;
-			this.fire(TransformGizmo.EVENT_TRANSFORMEND);
-		});
-		this.on(Gizmo.EVENT_NODESDETACH, () => {
-			this._hoverAxis = "";
-			this._hoverIsPlane = false;
-			this._hover();
-			this.fire(Gizmo.EVENT_POINTERUP);
-		});
-	}
-	get theme() {
-		return this._theme;
-	}
-	set xAxisColor(value) {
-		this.setTheme({
-			shapeBase: {
-				x: value
-			},
-			shapeHover: {
-				x: color4from3(value, this.colorAlpha)
-			},
-			guideBase: {
-				x: value
-			},
-			guideOcclusion: 1
-		});
-	}
-	get xAxisColor() {
-		return this._theme.shapeBase.x;
-	}
-	set yAxisColor(value) {
-		this.setTheme({
-			shapeBase: {
-				y: value
-			},
-			shapeHover: {
-				y: color4from3(value, this.colorAlpha)
-			},
-			guideBase: {
-				y: value
-			},
-			guideOcclusion: 1
-		});
-	}
-	get yAxisColor() {
-		return this._theme.shapeBase.y;
-	}
-	set zAxisColor(value) {
-		this.setTheme({
-			shapeBase: {
-				z: value
-			},
-			shapeHover: {
-				z: color4from3(value, this.colorAlpha)
-			},
-			guideBase: {
-				z: value
-			},
-			guideOcclusion: 1
-		});
-	}
-	get zAxisColor() {
-		return this._theme.shapeBase.z;
-	}
-	set colorAlpha(value) {
-		this.setTheme({
-			shapeHover: {
-				x: color4from3(this._theme.shapeHover.x, value),
-				y: color4from3(this._theme.shapeHover.y, value),
-				z: color4from3(this._theme.shapeHover.z, value),
-				xyz: color4from3(this._theme.shapeHover.xyz, value),
-				f: color4from3(this._theme.shapeHover.f, value)
-			}
-		});
-	}
-	get colorAlpha() {
-		return (this._theme.shapeHover.x.a + this._theme.shapeHover.y.a + this._theme.shapeHover.z.a + this._theme.shapeHover.xyz.a + this._theme.shapeHover.f.a) / 5;
-	}
-	get _dragging() {
-		return !this._hoverAxis && !!this._selectedAxis;
-	}
-	_getAxis(meshInstance) {
-		if (!meshInstance) {
-			return "";
-		}
-		return meshInstance.node.name.split(":")[1];
-	}
-	_getIsPlane(meshInstance) {
-		if (!meshInstance) {
-			return false;
-		}
-		return meshInstance.node.name.indexOf("plane") !== -1;
-	}
-	_hover(meshInstance) {
-		if (this._dragging) {
-			return;
-		}
-		const remove = new Set(this._hovering);
-		let changed = false;
-		const add = (axis) => {
-			if (remove.has(axis)) {
-				remove.delete(axis);
-			} else {
-				this._hovering.add(axis);
-				this._shapes[axis]?.hover(true);
-				changed = true;
-			}
-		};
-		this._hoverAxis = this._getAxis(meshInstance);
-		this._hoverIsPlane = this._getIsPlane(meshInstance);
-		if (this._hoverAxis) {
-			if (this._hoverAxis === "xyz") {
-				add("x");
-				add("y");
-				add("z");
-				add("xyz");
-			} else if (this._hoverIsPlane) {
-				switch (this._hoverAxis) {
-					case "x":
-						add("y");
-						add("z");
-						add("yz");
-						break;
-					case "y":
-						add("x");
-						add("z");
-						add("xz");
-						break;
-					case "z":
-						add("x");
-						add("y");
-						add("xy");
-						break;
-				}
-			} else {
-				add(this._hoverAxis);
-			}
-		}
-		for (const axis of remove) {
-			this._hovering.delete(axis);
-			this._shapes[axis]?.hover(false);
-			changed = true;
-		}
-		if (changed) {
-			this._renderUpdate = true;
-		}
-	}
-	_createRay(mouseWPos) {
-		if (this._camera.projection === PROJECTION_PERSPECTIVE) {
-			ray.origin.copy(this._camera.entity.getPosition());
-			ray.direction.sub2(mouseWPos, ray.origin).normalize();
-			return ray;
-		}
-		const orthoDepth = this._camera.farClip - this._camera.nearClip;
-		ray.origin.sub2(mouseWPos, v1$3.copy(this._camera.entity.forward).mulScalar(orthoDepth));
-		ray.direction.copy(this._camera.entity.forward);
-		return ray;
-	}
-	_createPlane(axis, isFacing, isLine) {
-		const facingDir = v1$3.copy(this.facingDir);
-		const normal = plane.normal.set(0, 0, 0);
-		if (isFacing) {
-			normal.copy(this._camera.entity.forward).mulScalar(-1);
-		} else {
-			normal[axis] = 1;
-			this._rootStartRot.transformVector(normal, normal);
-			if (isLine) {
-				v2$3.cross(normal, facingDir).normalize();
-				normal.cross(v2$3, normal).normalize();
-			}
-		}
-		return plane.setFromPointNormal(this._rootStartPos, normal);
-	}
-	_dirFromAxis(axis, dir) {
-		if (axis === "f") {
-			dir.copy(this._camera.entity.forward).mulScalar(-1);
-		} else {
-			dir.set(0, 0, 0);
-			dir[axis] = 1;
-		}
-		return dir;
-	}
-	_projectToAxis(point2, axis) {
-		v1$3.set(0, 0, 0);
-		v1$3[axis] = 1;
-		point2.copy(v1$3.mulScalar(v1$3.dot(point2)));
-		const v = point2[axis];
-		point2.set(0, 0, 0);
-		point2[axis] = v;
-	}
-	_screenToPoint(x, y, isFacing = false, isLine = false) {
-		const mouseWPos = this._camera.screenToWorld(x, y, 1);
-		const axis = this._selectedAxis;
-		const ray2 = this._createRay(mouseWPos);
-		const plane2 = this._createPlane(axis, isFacing, isLine);
-		if (!plane2.intersectsRay(ray2, point$3)) {
-			return point$3;
-		}
-		return point$3;
-	}
-	_drawGuideLines(pos, rot, activeAxis, activeIsPlane) {
-		for (const axis of AXES$2) {
-			if (activeAxis === "xyz") {
-				this._drawSpanLine(pos, rot, axis);
-				continue;
-			}
-			if (activeIsPlane) {
-				if (axis !== activeAxis) {
-					this._drawSpanLine(pos, rot, axis);
-				}
-			} else {
-				if (axis === activeAxis) {
-					this._drawSpanLine(pos, rot, axis);
-				}
-			}
-		}
-	}
-	_drawSpanLine(pos, rot, axis) {
-		const dir = this._dirFromAxis(axis, v1$3);
-		const base = this._theme.guideBase[axis];
-		const from = v1$3.copy(dir).mulScalar(this._camera.farClip - this._camera.nearClip);
-		const to = v2$3.copy(from).mulScalar(-1);
-		rot.transformVector(from, from).add(pos);
-		rot.transformVector(to, to).add(pos);
-		if (this._theme.guideOcclusion < 1) {
-			const occluded = color$1.copy(base);
-			occluded.a *= 1 - this._theme.guideOcclusion;
-			this._app.drawLine(from, to, occluded, false, this._layer);
-		}
-		if (base.a !== 0) {
-			this._app.drawLine(from, to, base, true);
-		}
-	}
-	_createTransform() {
-		for (const key in this._shapes) {
-			const shape = this._shapes[key];
-			this.root.addChild(shape.entity);
-			this.intersectShapes.push(shape);
-			for (let i = 0; i < shape.meshInstances.length; i++) {
-				this._shapeMap.set(shape.meshInstances[i], shape);
-			}
-		}
-	}
-	enableShape(shapeAxis, enabled) {
-		if (shapeAxis === "face") {
-			shapeAxis = "f";
-		}
-		const shape = this._shapes[shapeAxis];
-		if (!shape) {
-			return;
-		}
-		shape.disabled = !enabled;
-	}
-	isShapeEnabled(shapeAxis) {
-		if (shapeAxis === "face") {
-			shapeAxis = "f";
-		}
-		const shape = this._shapes[shapeAxis];
-		if (!shape) {
-			return false;
-		}
-		return !shape.disabled;
-	}
-	setTheme(partial) {
-		const theme = { ...this._theme, ...partial };
-		if (typeof theme !== "object" || typeof theme.shapeBase !== "object" || typeof theme.shapeHover !== "object" || typeof theme.guideBase !== "object") {
-			return;
-		}
-		for (const axis in theme.shapeBase) {
-			if (theme.shapeBase[axis] instanceof Color) {
-				this._theme.shapeBase[axis].copy(theme.shapeBase[axis]);
-			}
-		}
-		for (const axis in theme.shapeHover) {
-			if (theme.shapeHover[axis] instanceof Color) {
-				this._theme.shapeHover[axis].copy(theme.shapeHover[axis]);
-			}
-		}
-		for (const axis in theme.guideBase) {
-			if (theme.guideBase[axis] instanceof Color) {
-				this._theme.guideBase[axis].copy(theme.guideBase[axis]);
-			}
-		}
-		if (typeof theme.guideOcclusion === "number") {
-			this._theme.guideOcclusion = math.clamp(theme.guideOcclusion, 0, 1);
-		}
-		if (theme.disabled instanceof Color) {
-			this._theme.disabled.copy(theme.disabled);
-		}
-		for (const name in this._shapes) {
-			this._shapes[name].hover(!!this._hoverAxis);
-		}
-	}
-	prerender() {
-		super.prerender();
-		if (!this.enabled) {
-			return;
-		}
-		const gizmoPos = this.root.getLocalPosition();
-		const gizmoRot = this.root.getRotation();
-		const activeAxis = this._hoverAxis || this._selectedAxis;
-		const activeIsPlane = this._hoverIsPlane || this._selectedIsPlane;
-		this._drawGuideLines(gizmoPos, gizmoRot, activeAxis, activeIsPlane);
-	}
-	destroy() {
-		super.destroy();
-		for (const key in this._shapes) {
-			this._shapes[key].destroy();
-		}
-	}
-}
-
-const tmpV1$4 = new Vec3();
-const tmpV2$3 = new Vec3();
-const tmpV3 = new Vec3();
-class TriData {
-	_priority = 0;
-	_transform = new Mat4();
-	tris = [];
-	constructor(geometry, priority = 0) {
-		this.fromGeometry(geometry);
-		this._priority = priority;
-	}
-	get transform() {
-		return this._transform;
-	}
-	get priority() {
-		return this._priority;
-	}
-	setTransform(pos = new Vec3(), rot = new Quat(), scale = new Vec3()) {
-		this.transform.setTRS(pos, rot, scale);
-	}
-	fromGeometry(geometry) {
-		if (!geometry || !(geometry instanceof Geometry)) {
-			throw new Error("No geometry provided.");
-		}
-		const positions = geometry.positions ?? [];
-		const indices = geometry.indices ?? [];
-		this.tris = [];
-		for (let k = 0; k < indices.length; k += 3) {
-			const i1 = indices[k];
-			const i2 = indices[k + 1];
-			const i3 = indices[k + 2];
-			tmpV1$4.set(positions[i1 * 3], positions[i1 * 3 + 1], positions[i1 * 3 + 2]);
-			tmpV2$3.set(positions[i2 * 3], positions[i2 * 3 + 1], positions[i2 * 3 + 2]);
-			tmpV3.set(positions[i3 * 3], positions[i3 * 3 + 1], positions[i3 * 3 + 2]);
-			const tri = new Tri(tmpV1$4, tmpV2$3, tmpV3);
-			this.tris.push(tri);
-		}
-	}
-}
-
-const unlitShader = {
-	uniqueName: "gizmo-unlit",
-	attributes: {
-		vertex_position: SEMANTIC_POSITION
-	},
-	vertexGLSL: `
-		attribute vec3 vertex_position;
-	
-		uniform mat4 matrix_model;
-		uniform mat4 matrix_viewProjection;
-	
-		void main(void) {
-			gl_Position = matrix_viewProjection * matrix_model * vec4(vertex_position, 1.0);
-			gl_Position.z = clamp(gl_Position.z, -abs(gl_Position.w), abs(gl_Position.w));
-		}
-	`,
-	fragmentGLSL: `
-		#include "gammaPS"
-	
-		precision highp float;
-	
-		uniform vec4 uColor;
-		uniform float uDepth;
-		void main(void) {
-			if (uColor.a < 1.0 / 255.0) {
-				discard;
-			}
-			gl_FragColor = vec4(gammaCorrectOutput(decodeGamma(uColor)), uColor.a);
-			#if DEPTH_WRITE == 1
-				gl_FragDepth = uDepth;
-			#endif
-		}
-	`,
-	vertexWGSL: `
-		attribute vertex_position: vec3f;
-		uniform matrix_model: mat4x4f;
-		uniform matrix_viewProjection: mat4x4f;
-		@vertex
-		fn vertexMain(input: VertexInput) -> VertexOutput {
-			var output: VertexOutput;
-			let pos = vec4f(input.vertex_position, 1.0);
-			output.position = uniform.matrix_viewProjection * uniform.matrix_model * pos;
-			output.position.z = clamp(output.position.z, -abs(output.position.w), abs(output.position.w));
-			return output;
-		}
-	`,
-	fragmentWGSL: `
-		#include "gammaPS"
-		uniform uColor: vec4f;
-		uniform uDepth: f32;
-		@fragment
-		fn fragmentMain(input: FragmentInput) -> FragmentOutput {
-			var output: FragmentOutput;
-			if (uniform.uColor.a < 1.0 / 255.0) {
-				discard;
-			}
-			output.color = vec4f(gammaCorrectOutput(decodeGamma(uniform.uColor)), uniform.uColor.a);
-			#if DEPTH_WRITE == 1
-				output.fragDepth = uniform.uDepth;
-			#endif
-			return output;
-		}
-	`
-};
-
-const tmpG = new Geometry();
-tmpG.positions = [];
-tmpG.normals = [];
-class Shape {
-	_position = new Vec3();
-	_rotation = new Vec3();
-	_scale = new Vec3(1, 1, 1);
-	_layers = [];
-	_material = new ShaderMaterial(unlitShader);
-	_disabled = false;
-	_visible = true;
-	_defaultColor = Color.WHITE;
-	_hoverColor = Color.BLACK;
-	_disabledColor = COLOR_GRAY;
-	_cull = CULLFACE_BACK;
-	_depth = -1;
-	device;
-	axis;
-	entity;
-	triData = [];
-	meshInstances = [];
-	constructor(device, name, args) {
-		this.device = device;
-		this.axis = args.axis ?? "x";
-		if (args.position instanceof Vec3) {
-			this._position.copy(args.position);
-		}
-		if (args.rotation instanceof Vec3) {
-			this._rotation.copy(args.rotation);
-		}
-		if (args.scale instanceof Vec3) {
-			this._scale.copy(args.scale);
-		}
-		this._disabled = args.disabled ?? this._disabled;
-		this._visible = args.visible ?? this._visible;
-		this._layers = args.layers ?? this._layers;
-		if (args.defaultColor instanceof Color) {
-			this._defaultColor = args.defaultColor;
-		}
-		if (args.hoverColor instanceof Color) {
-			this._hoverColor = args.hoverColor;
-		}
-		if (args.disabledColor instanceof Color) {
-			this._disabledColor = args.disabledColor;
-		}
-		this._cull = args.cull ?? this._cull;
-		this._depth = args.depth ?? this._depth;
-		this.entity = new Entity(`${name}:${this.axis}`);
-		this.entity.setLocalPosition(this._position);
-		this.entity.setLocalEulerAngles(this._rotation);
-		this.entity.setLocalScale(this._scale);
-	}
-	set disabled(value) {
-		this._disabled = value ?? false;
-		this.hover(false);
-	}
-	get disabled() {
-		return this._disabled;
-	}
-	set visible(value) {
-		if (value === this._visible) {
-			return;
-		}
-		for (let i = 0; i < this.meshInstances.length; i++) {
-			this.meshInstances[i].visible = value;
-		}
-		this._visible = value;
-	}
-	get visible() {
-		return this._visible;
-	}
-	_createRenderComponent(entity, meshes) {
-		const color = this._disabled ? this._disabledColor : this._defaultColor;
-		this._material.setDefine("DEPTH_WRITE", this._depth > 0 ? "1" : "0");
-		this._material.setParameter("uDepth", this._depth);
-		this._material.setParameter("uColor", color.toArray());
-		this._material.cull = this._cull;
-		this._material.blendType = BLEND_NORMAL;
-		this._material.update();
-		const meshInstances = [];
-		for (let i = 0; i < meshes.length; i++) {
-			const mi = new MeshInstance(meshes[i], this._material);
-			mi.cull = false;
-			meshInstances.push(mi);
-			this.meshInstances.push(mi);
-		}
-		entity.addComponent("render", {
-			meshInstances,
-			layers: this._layers,
-			castShadows: false
-		});
-	}
-	_update() {
-		this.entity.setLocalPosition(this._position);
-		this.entity.setLocalEulerAngles(this._rotation);
-		this.entity.setLocalScale(this._scale);
-	}
-	hover(state) {
-		const color = this._disabled ? this._disabledColor : state ? this._hoverColor : this._defaultColor;
-		this._material.setParameter("uColor", color.toArray());
-	}
-	destroy() {
-		this.entity.destroy();
-	}
-}
-
-const UPDATE_EPSILON$1 = 1e-6;
-class PlaneShape extends Shape {
-	_cull = CULLFACE_NONE;
-	_size = 0.16;
-	_gap = 0;
-	_flipped = new Vec3();
-	constructor(device, args = {}) {
-		super(device, "plane", args);
-		this._size = args.size ?? this._size;
-		this._gap = args.gap ?? this._gap;
-		this.triData = [
-			new TriData(new PlaneGeometry())
-		];
-		this._createRenderComponent(this.entity, [
-			Mesh.fromGeometry(this.device, new PlaneGeometry())
-		]);
-		this._update();
-	}
-	set size(value) {
-		this._size = value ?? this._size;
-		this._update();
-	}
-	get size() {
-		return this._size;
-	}
-	set gap(value) {
-		this._gap = value ?? this._gap;
-		this._update();
-	}
-	get gap() {
-		return this._gap;
-	}
-	set flipped(value) {
-		if (this._flipped.distance(value) < UPDATE_EPSILON$1) {
-			return;
-		}
-		this._flipped.copy(value);
-		this._update();
-	}
-	get flipped() {
-		return this._flipped;
-	}
-	_update() {
-		const offset = this._size / 2 + this._gap;
-		this._position.set(
-			this._flipped.x ? -offset : offset,
-			this._flipped.y ? -offset : offset,
-			this._flipped.z ? -offset : offset
-		);
-		this._position[this.axis] = 0;
-		this.entity.setLocalPosition(this._position);
-		this.entity.setLocalEulerAngles(this._rotation);
-		this.entity.setLocalScale(this._size, this._size, this._size);
-	}
-}
-
-const tmpV1$3 = new Vec3();
-const tmpV2$2 = new Vec3();
-const tmpQ1$1 = new Quat();
-class ArrowShape extends Shape {
-	_gap = 0;
-	_lineThickness = 0.02;
-	_lineLength = 0.5;
-	_arrowThickness = 0.12;
-	_arrowLength = 0.18;
-	_tolerance = 0.1;
-	_head;
-	_line;
-	constructor(device, args = {}) {
-		super(device, "arrow", args);
-		this._gap = args.gap ?? this._gap;
-		this._lineThickness = args.lineThickness ?? this._lineThickness;
-		this._lineLength = args.lineLength ?? this._lineLength;
-		this._arrowThickness = args.arrowThickness ?? this._arrowThickness;
-		this._arrowLength = args.arrowLength ?? this._arrowLength;
-		this._tolerance = args.tolerance ?? this._tolerance;
-		this.triData = [
-			new TriData(new ConeGeometry()),
-			new TriData(new CylinderGeometry(), 1)
-		];
-		this._head = new Entity(`head:${this.axis}`);
-		this.entity.addChild(this._head);
-		this._createRenderComponent(this._head, [
-			Mesh.fromGeometry(this.device, new ConeGeometry())
-		]);
-		this._line = new Entity(`line:${this.axis}`);
-		this.entity.addChild(this._line);
-		this._createRenderComponent(this._line, [
-			Mesh.fromGeometry(this.device, new CylinderGeometry())
-		]);
-		this._update();
-	}
-	set gap(value) {
-		this._gap = value ?? this._gap;
-		this._update();
-	}
-	get gap() {
-		return this._gap;
-	}
-	set lineThickness(value) {
-		this._lineThickness = value ?? this._lineThickness;
-		this._update();
-	}
-	get lineThickness() {
-		return this._lineThickness;
-	}
-	set lineLength(value) {
-		this._lineLength = value ?? this._lineLength;
-		this._update();
-	}
-	get lineLength() {
-		return this._lineLength;
-	}
-	set arrowThickness(value) {
-		this._arrowThickness = value ?? this._arrowThickness;
-		this._update();
-	}
-	get arrowThickness() {
-		return this._arrowThickness;
-	}
-	set arrowLength(value) {
-		this._arrowLength = value ?? this._arrowLength;
-		this._update();
-	}
-	get arrowLength() {
-		return this._arrowLength;
-	}
-	set tolerance(value) {
-		this._tolerance = value;
-		this._update();
-	}
-	get tolerance() {
-		return this._tolerance;
-	}
-	_update() {
-		tmpV1$3.set(0, this._gap + this._arrowLength * 0.5 + this._lineLength, 0);
-		tmpQ1$1.set(0, 0, 0, 1);
-		tmpV2$2.set(this._arrowThickness, this._arrowLength, this._arrowThickness);
-		this.triData[0].setTransform(tmpV1$3, tmpQ1$1, tmpV2$2);
-		tmpV1$3.set(0, this._gap + this._lineLength * 0.5, 0);
-		tmpQ1$1.set(0, 0, 0, 1);
-		tmpV2$2.set(this._lineThickness + this._tolerance, this._lineLength, this._lineThickness + this._tolerance);
-		this.triData[1].setTransform(tmpV1$3, tmpQ1$1, tmpV2$2);
-		this._head.setLocalPosition(0, this._gap + this._arrowLength * 0.5 + this._lineLength, 0);
-		this._head.setLocalScale(this._arrowThickness, this._arrowLength, this._arrowThickness);
-		this._line.setLocalPosition(0, this._gap + this._lineLength * 0.5, 0);
-		this._line.setLocalScale(this._lineThickness, this._lineLength, this._lineThickness);
-	}
-}
-
-class SphereShape extends Shape {
-	_radius = 0.03;
-	constructor(device, args = {}) {
-		super(device, "sphereCenter", args);
-		this._radius = args.radius ?? this._radius;
-		this.triData = [
-			new TriData(new SphereGeometry(), 2)
-		];
-		this._createRenderComponent(this.entity, [
-			Mesh.fromGeometry(this.device, new SphereGeometry({
-				latitudeBands: 32,
-				longitudeBands: 32
-			}))
-		]);
-		this._update();
-	}
-	set radius(value) {
-		this._radius = value ?? this._radius;
-		this._update();
-	}
-	get radius() {
-		return this._radius;
-	}
-	_update() {
-		const scale = this._radius * 2;
-		this.entity.setLocalScale(scale, scale, scale);
-	}
-}
-
-const v1$2 = new Vec3();
-const v2$2 = new Vec3();
-const point$2 = new Vec3();
-const delta$1 = new Vec3();
-const q$1 = new Quat();
-const GLANCE_EPSILON$1 = 0.01;
-const AXES$1 = ["x", "y", "z"];
-class TranslateGizmo extends TransformGizmo {
-	_shapes = {
-		xyz: new SphereShape(this._device, {
-			axis: "xyz",
-			layers: [this._layer.id],
-			defaultColor: this._theme.shapeBase.xyz,
-			hoverColor: this._theme.shapeHover.xyz,
-			disabledColor: this._theme.disabled
-		}),
-		yz: new PlaneShape(this._device, {
-			axis: "x",
-			layers: [this._layer.id],
-			rotation: new Vec3(0, 0, -90),
-			defaultColor: this._theme.shapeBase.x,
-			hoverColor: this._theme.shapeHover.x,
-			disabledColor: this._theme.disabled,
-			depth: 1
-		}),
-		xz: new PlaneShape(this._device, {
-			axis: "y",
-			layers: [this._layer.id],
-			rotation: new Vec3(0, 0, 0),
-			defaultColor: this._theme.shapeBase.y,
-			hoverColor: this._theme.shapeHover.y,
-			disabledColor: this._theme.disabled,
-			depth: 1
-		}),
-		xy: new PlaneShape(this._device, {
-			axis: "z",
-			layers: [this._layer.id],
-			rotation: new Vec3(90, 0, 0),
-			defaultColor: this._theme.shapeBase.z,
-			hoverColor: this._theme.shapeHover.z,
-			disabledColor: this._theme.disabled,
-			depth: 1
-		}),
-		x: new ArrowShape(this._device, {
-			axis: "x",
-			layers: [this._layer.id],
-			rotation: new Vec3(0, 0, -90),
-			defaultColor: this._theme.shapeBase.x,
-			hoverColor: this._theme.shapeHover.x,
-			disabledColor: this._theme.disabled
-		}),
-		y: new ArrowShape(this._device, {
-			axis: "y",
-			layers: [this._layer.id],
-			rotation: new Vec3(0, 0, 0),
-			defaultColor: this._theme.shapeBase.y,
-			hoverColor: this._theme.shapeHover.y,
-			disabledColor: this._theme.disabled
-		}),
-		z: new ArrowShape(this._device, {
-			axis: "z",
-			layers: [this._layer.id],
-			rotation: new Vec3(90, 0, 0),
-			defaultColor: this._theme.shapeBase.z,
-			hoverColor: this._theme.shapeHover.z,
-			disabledColor: this._theme.disabled
-		})
-	};
-	_nodeLocalPositions = /* @__PURE__ */ new Map();
-	_nodePositions = /* @__PURE__ */ new Map();
-	snapIncrement = 1;
-	flipPlanes = true;
-	constructor(camera, layer) {
-		super(camera, layer, "gizmo:translate");
-		this._createTransform();
-		this.on(TransformGizmo.EVENT_TRANSFORMSTART, () => {
-			this._storeNodePositions();
-			this._drag(true);
-		});
-		this.on(TransformGizmo.EVENT_TRANSFORMMOVE, (point2) => {
-			const translateDelta = delta$1.copy(point2).sub(this._selectionStartPoint);
-			if (this.snap) {
-				translateDelta.mulScalar(1 / this.snapIncrement);
-				translateDelta.round();
-				translateDelta.mulScalar(this.snapIncrement);
-			}
-			this._setNodePositions(translateDelta);
-		});
-		this.on(TransformGizmo.EVENT_TRANSFORMEND, () => {
-			this._drag(false);
-		});
-		this.on(TransformGizmo.EVENT_NODESDETACH, () => {
-			this._nodeLocalPositions.clear();
-			this._nodePositions.clear();
-		});
-	}
-	set axisGap(value) {
-		this._setArrowProp("gap", value);
-	}
-	get axisGap() {
-		return this._shapes.x.gap;
-	}
-	set axisLineThickness(value) {
-		this._setArrowProp("lineThickness", value);
-	}
-	get axisLineThickness() {
-		return this._shapes.x.lineThickness;
-	}
-	set axisLineLength(value) {
-		this._setArrowProp("lineLength", value);
-	}
-	get axisLineLength() {
-		return this._shapes.x.lineLength;
-	}
-	set axisLineTolerance(value) {
-		this._setArrowProp("tolerance", value);
-	}
-	get axisLineTolerance() {
-		return this._shapes.x.tolerance;
-	}
-	set axisArrowThickness(value) {
-		this._setArrowProp("arrowThickness", value);
-	}
-	get axisArrowThickness() {
-		return this._shapes.x.arrowThickness;
-	}
-	set axisArrowLength(value) {
-		this._setArrowProp("arrowLength", value);
-	}
-	get axisArrowLength() {
-		return this._shapes.x.arrowLength;
-	}
-	set axisPlaneSize(value) {
-		this._setPlaneProp("size", value);
-	}
-	get axisPlaneSize() {
-		return this._shapes.yz.size;
-	}
-	set axisPlaneGap(value) {
-		this._setPlaneProp("gap", value);
-	}
-	get axisPlaneGap() {
-		return this._shapes.yz.gap;
-	}
-	set axisCenterSize(value) {
-		this._shapes.xyz.radius = value;
-	}
-	get axisCenterSize() {
-		return this._shapes.xyz.radius;
-	}
-	set flipShapes(value) {
-		this.flipPlanes = value;
-	}
-	get flipShapes() {
-		return this.flipPlanes;
-	}
-	_setArrowProp(prop, value) {
-		this._shapes.x[prop] = value;
-		this._shapes.y[prop] = value;
-		this._shapes.z[prop] = value;
-	}
-	_setPlaneProp(prop, value) {
-		this._shapes.yz[prop] = value;
-		this._shapes.xz[prop] = value;
-		this._shapes.xy[prop] = value;
-	}
-	_shapesLookAtCamera() {
-		const cameraDir = this.cameraDir;
-		let changed = false;
-		let dot, enabled;
-		dot = cameraDir.dot(this.root.right);
-		enabled = 1 - Math.abs(dot) > GLANCE_EPSILON$1;
-		if (this._shapes.x.entity.enabled !== enabled) {
-			this._shapes.x.entity.enabled = enabled;
-			changed = true;
-		}
-		dot = cameraDir.dot(this.root.up);
-		enabled = 1 - Math.abs(dot) > GLANCE_EPSILON$1;
-		if (this._shapes.y.entity.enabled !== enabled) {
-			this._shapes.y.entity.enabled = enabled;
-			changed = true;
-		}
-		dot = cameraDir.dot(this.root.forward);
-		enabled = 1 - Math.abs(dot) > GLANCE_EPSILON$1;
-		if (this._shapes.z.entity.enabled !== enabled) {
-			this._shapes.z.entity.enabled = enabled;
-			changed = true;
-		}
-		let flipped;
-		v1$2.cross(cameraDir, this.root.right);
-		enabled = 1 - v1$2.length() > GLANCE_EPSILON$1;
-		if (this._shapes.yz.entity.enabled !== enabled) {
-			this._shapes.yz.entity.enabled = enabled;
-			changed = true;
-		}
-		flipped = this.flipPlanes ? v2$2.set(0, +(v1$2.dot(this.root.forward) < 0), +(v1$2.dot(this.root.up) < 0)) : Vec3.ZERO;
-		if (!this._shapes.yz.flipped.equals(flipped)) {
-			this._shapes.yz.flipped = flipped;
-			changed = true;
-		}
-		v1$2.cross(cameraDir, this.root.forward);
-		enabled = 1 - v1$2.length() > GLANCE_EPSILON$1;
-		if (this._shapes.xy.entity.enabled !== enabled) {
-			this._shapes.xy.entity.enabled = enabled;
-			changed = true;
-		}
-		flipped = this.flipPlanes ? v2$2.set(+(v1$2.dot(this.root.up) < 0), +(v1$2.dot(this.root.right) > 0), 0) : Vec3.ZERO;
-		if (!this._shapes.xy.flipped.equals(flipped)) {
-			this._shapes.xy.flipped = flipped;
-			changed = true;
-		}
-		v1$2.cross(cameraDir, this.root.up);
-		enabled = 1 - v1$2.length() > GLANCE_EPSILON$1;
-		if (this._shapes.xz.entity.enabled !== enabled) {
-			this._shapes.xz.entity.enabled = enabled;
-			changed = true;
-		}
-		flipped = this.flipPlanes ? v2$2.set(+(v1$2.dot(this.root.forward) > 0), 0, +(v1$2.dot(this.root.right) > 0)) : Vec3.ZERO;
-		if (!this._shapes.xz.flipped.equals(flipped)) {
-			this._shapes.xz.flipped = flipped;
-			changed = true;
-		}
-		if (changed) {
-			this._renderUpdate = true;
-		}
-	}
-	_drag(state) {
-		for (const axis in this._shapes) {
-			const shape = this._shapes[axis];
-			switch (this.dragMode) {
-				case "show": {
-					continue;
-				}
-				case "hide": {
-					shape.visible = !state;
-					continue;
-				}
-				case "selected": {
-					if (this._selectedAxis === "xyz") {
-						shape.visible = state ? axis.length === 1 : true;
-						continue;
-					}
-					if (this._selectedIsPlane) {
-						shape.visible = state ? axis.length === 1 && !axis.includes(this._selectedAxis) : true;
-						continue;
-					}
-					shape.visible = state ? axis === this._selectedAxis : true;
-				}
-			}
-		}
-		this._renderUpdate = true;
-	}
-	_storeNodePositions() {
-		for (let i = 0; i < this.nodes.length; i++) {
-			const node = this.nodes[i];
-			this._nodeLocalPositions.set(node, node.getLocalPosition().clone());
-			this._nodePositions.set(node, node.getPosition().clone());
-		}
-	}
-	_setNodePositions(translateDelta) {
-		for (let i = 0; i < this.nodes.length; i++) {
-			const node = this.nodes[i];
-			if (this._coordSpace === "local") {
-				const pos = this._nodeLocalPositions.get(node);
-				if (!pos) {
-					continue;
-				}
-				v1$2.copy(translateDelta);
-				node.parent?.getWorldTransform().getScale(v2$2);
-				v2$2.x = 1 / v2$2.x;
-				v2$2.y = 1 / v2$2.y;
-				v2$2.z = 1 / v2$2.z;
-				q$1.copy(node.getLocalRotation()).transformVector(v1$2, v1$2);
-				v1$2.mul(v2$2);
-				node.setLocalPosition(v1$2.add(pos));
-			} else {
-				const pos = this._nodePositions.get(node);
-				if (!pos) {
-					continue;
-				}
-				node.setPosition(v1$2.copy(translateDelta).add(pos));
-			}
-		}
-		this._updatePosition();
-	}
-	_screenToPoint(x, y) {
-		const mouseWPos = this._camera.screenToWorld(x, y, 1);
-		const axis = this._selectedAxis;
-		const isPlane = this._selectedIsPlane;
-		const ray = this._createRay(mouseWPos);
-		const plane = this._createPlane(axis, axis === "xyz", !isPlane);
-		if (!plane.intersectsRay(ray, point$2)) {
-			return point$2;
-		}
-		q$1.copy(this._rootStartRot).invert().transformVector(point$2, point$2);
-		if (!isPlane && axis !== "xyz") {
-			this._projectToAxis(point$2, axis);
-		}
-		return point$2;
-	}
-	_drawGuideLines(pos, rot, activeAxis, activeIsPlane) {
-		for (const axis of AXES$1) {
-			if (this._dragging || activeAxis === "xyz") {
-				this._drawSpanLine(pos, rot, axis);
-				continue;
-			}
-			if (activeIsPlane) {
-				if (axis !== activeAxis) {
-					this._drawSpanLine(pos, rot, axis);
-				}
-			} else {
-				if (axis === activeAxis) {
-					this._drawSpanLine(pos, rot, axis);
-				}
-			}
-		}
-	}
-	prerender() {
-		super.prerender();
-		if (!this.enabled) {
-			return;
-		}
-		this._shapesLookAtCamera();
-	}
-}
-
-const TORUS_RENDER_SEGMENTS = 80;
-const TORUS_INTERSECT_SEGMENTS = 20;
-class ArcShape extends Shape {
-	_tubeRadius = 0.01;
-	_ringRadius = 0.5;
-	_sectorAngle = 360;
-	_tolerance = 0.05;
-	_triDataCache;
-	constructor(device, args = {}) {
-		super(device, "disk", args);
-		this._tubeRadius = args.tubeRadius ?? this._tubeRadius;
-		this._ringRadius = args.ringRadius ?? this._ringRadius;
-		this._sectorAngle = args.sectorAngle ?? this._sectorAngle;
-		this._triDataCache = [
-			new TriData(this._createTorusGeometry(this._sectorAngle)),
-			new TriData(this._createTorusGeometry(360))
-		];
-		this.triData = [this._triDataCache[0]];
-		this._createRenderComponent(this.entity, [
-			this._createTorusMesh(this._sectorAngle),
-			this._createTorusMesh(360)
-		]);
-		this.show("sector");
-		this._update();
-	}
-	_createTorusGeometry(sectorAngle) {
-		return new TorusGeometry({
-			tubeRadius: this._tubeRadius + this._tolerance,
-			ringRadius: this._ringRadius,
-			sectorAngle,
-			segments: TORUS_INTERSECT_SEGMENTS
-		});
-	}
-	_createTorusMesh(sectorAngle) {
-		const geom = new TorusGeometry({
-			tubeRadius: this._tubeRadius,
-			ringRadius: this._ringRadius,
-			sectorAngle,
-			segments: TORUS_RENDER_SEGMENTS
-		});
-		return Mesh.fromGeometry(this.device, geom);
-	}
-	set tubeRadius(value) {
-		this._tubeRadius = value ?? this._tubeRadius;
-		this._update();
-	}
-	get tubeRadius() {
-		return this._tubeRadius;
-	}
-	set ringRadius(value) {
-		this._ringRadius = value ?? this._ringRadius;
-		this._update();
-	}
-	get ringRadius() {
-		return this._ringRadius;
-	}
-	set tolerance(value) {
-		this._tolerance = value ?? this._tolerance;
-		this._update();
-	}
-	get tolerance() {
-		return this._tolerance;
-	}
-	_update() {
-		this._triDataCache[0].fromGeometry(this._createTorusGeometry(this._sectorAngle));
-		this._triDataCache[1].fromGeometry(this._createTorusGeometry(360));
-		this.meshInstances[0].mesh = this._createTorusMesh(this._sectorAngle);
-		this.meshInstances[1].mesh = this._createTorusMesh(360);
-	}
-	show(state) {
-		switch (state) {
-			case "sector": {
-				this.triData[0] = this._triDataCache[0];
-				this.meshInstances[0].visible = true;
-				this.meshInstances[1].visible = false;
-				break;
-			}
-			case "ring": {
-				this.triData[0] = this._triDataCache[1];
-				this.meshInstances[0].visible = false;
-				this.meshInstances[1].visible = true;
-				break;
-			}
-			case "none": {
-				this.meshInstances[0].visible = false;
-				this.meshInstances[1].visible = false;
-				break;
-			}
-		}
-	}
-}
-
-const tmpV1$2 = new Vec3();
-class MeshLine {
-	_thickness = 0.02;
-	_material = new ShaderMaterial(unlitShader);
-	entity = new Entity("mesh-line");
-	constructor(app, layer, args = {}) {
-		this._thickness = args.thickness ?? this._thickness;
-		this._material.blendState = BlendState.ALPHABLEND;
-		this._material.setDefine("DEPTH_WRITE", "1");
-		this._material.setParameter("uDepth", 0);
-		this._material.update();
-		const mesh = Mesh.fromGeometry(app.graphicsDevice, new CylinderGeometry());
-		const meshInstance = new MeshInstance(mesh, this._material);
-		this.entity.addComponent("render", {
-			meshInstances: [meshInstance],
-			layers: [layer.id]
-		});
-	}
-	set thickness(value) {
-		this._thickness = value ?? this._thickness;
-	}
-	get thickness() {
-		return this._thickness;
-	}
-	draw(from, to, scale, color) {
-		this._material.setParameter("uColor", color.toArray());
-		const dir = tmpV1$2.sub2(to, from).normalize();
-		const elev = Math.atan2(-dir.y, Math.sqrt(dir.x * dir.x + dir.z * dir.z)) * math.RAD_TO_DEG;
-		const azim = Math.atan2(-dir.x, -dir.z) * math.RAD_TO_DEG;
-		this.entity.setLocalEulerAngles(-elev + 90, azim, 0);
-		const length = from.distance(to) * scale;
-		this.entity.setLocalPosition(dir.mulScalar(0.5 * length).add(from));
-		this.entity.setLocalScale(this._thickness * scale, length, this._thickness * scale);
-	}
-	destroy() {
-		this._material.destroy();
-		this.entity.destroy();
-	}
-}
-
-const point$1 = new Vec3();
-const v1$1 = new Vec3();
-const v2$1 = new Vec3();
-const v3 = new Vec3();
-const q1 = new Quat();
-const q2 = new Quat();
-const color = new Color();
-const RING_FACING_EPSILON = 1e-4;
-const UPDATE_EPSILON = 1e-6;
-const AXES = ["x", "y", "z"];
-class RotateGizmo extends TransformGizmo {
-	_shapes = {
-		z: new ArcShape(this._device, {
-			axis: "z",
-			layers: [this._layer.id],
-			rotation: new Vec3(90, 0, 90),
-			defaultColor: this._theme.shapeBase.z,
-			hoverColor: this._theme.shapeHover.z,
-			disabledColor: this._theme.disabled,
-			sectorAngle: 180
-		}),
-		x: new ArcShape(this._device, {
-			axis: "x",
-			layers: [this._layer.id],
-			rotation: new Vec3(0, 0, -90),
-			defaultColor: this._theme.shapeBase.x,
-			hoverColor: this._theme.shapeHover.x,
-			disabledColor: this._theme.disabled,
-			sectorAngle: 180
-		}),
-		y: new ArcShape(this._device, {
-			axis: "y",
-			layers: [this._layer.id],
-			rotation: new Vec3(0, 0, 0),
-			defaultColor: this._theme.shapeBase.y,
-			hoverColor: this._theme.shapeHover.y,
-			disabledColor: this._theme.disabled,
-			sectorAngle: 180
-		}),
-		f: new ArcShape(this._device, {
-			axis: "f",
-			layers: [this._layer.id],
-			defaultColor: this._theme.shapeBase.f,
-			hoverColor: this._theme.shapeHover.f,
-			disabledColor: this._theme.disabled,
-			ringRadius: 0.55
-		}),
-		xyz: new SphereShape(this._device, {
-			axis: "xyz",
-			layers: [this._layer.id],
-			defaultColor: this._theme.shapeBase.xyz,
-			hoverColor: this._theme.shapeHover.xyz,
-			disabledColor: this._theme.disabled,
-			radius: 0.5
-		})
-	};
-	_selectionStartAngle = 0;
-	_nodeLocalRotations = /* @__PURE__ */ new Map();
-	_nodeRotations = /* @__PURE__ */ new Map();
-	_nodeOffsets = /* @__PURE__ */ new Map();
-	_screenPos = new Vec2();
-	_screenStartPos = new Vec2();
-	_guideAngleStart = new Vec3();
-	_guideAngleEnd = new Vec3();
-	_guideAngleLines;
-	_facingDir = new Vec3();
-	snapIncrement = 5;
-	rotationMode = "absolute";
-	constructor(camera, layer) {
-		super(camera, layer, "gizmo:rotate");
-		this.setTheme({
-			shapeBase: {
-				xyz: new Color(0, 0, 0, 0)
-			},
-			shapeHover: {
-				xyz: new Color(1, 1, 1, 0.2)
-			}
-		});
-		this._createTransform();
-		this._guideAngleLines = [
-			new MeshLine(this._app, this._layer),
-			new MeshLine(this._app, this._layer)
-		];
-		this._guideAngleLines.forEach((line) => {
-			this._app.root.addChild(line.entity);
-			line.entity.enabled = false;
-		});
-		this.on(TransformGizmo.EVENT_TRANSFORMSTART, (point2, x, y) => {
-			this._screenPos.set(x, y);
-			this._screenStartPos.set(x, y);
-			this._selectionStartAngle = this._calculateArcAngle(point2, x, y);
-			this._storeNodeRotations();
-			this._storeGuidePoints();
-			this._drag(true);
-			this._angleGuide(true);
-		});
-		this.on(TransformGizmo.EVENT_TRANSFORMMOVE, (point2, x, y) => {
-			const axis = this._selectedAxis;
-			if (!axis) {
-				return;
-			}
-			this._screenPos.set(x, y);
-			if (axis === "xyz") {
-				const facingDir = v1$1.copy(this.facingDir);
-				const delta = v2$1.copy(point2).sub(this._selectionStartPoint);
-				const angleAxis = v1$1.cross(facingDir, delta).normalize();
-				const angleDelta = this._screenPos.distance(this._screenStartPos);
-				this._setNodeRotations(axis, angleAxis, angleDelta);
-			} else {
-				let angleDelta = this._calculateArcAngle(point2, x, y) - this._selectionStartAngle;
-				if (this.snap) {
-					angleDelta = Math.round(angleDelta / this.snapIncrement) * this.snapIncrement;
-				}
-				const angleAxis = this._dirFromAxis(axis, v1$1);
-				this._setNodeRotations(axis, angleAxis, angleDelta);
-				this._updateGuidePoints(angleDelta);
-				this._angleGuide(true);
-			}
-		});
-		this.on(TransformGizmo.EVENT_TRANSFORMEND, () => {
-			this._drag(false);
-			this._angleGuide(false);
-		});
-		this.on(TransformGizmo.EVENT_NODESDETACH, () => {
-			this._nodeLocalRotations.clear();
-			this._nodeRotations.clear();
-			this._nodeOffsets.clear();
-		});
-	}
-	set xyzTubeRadius(value) {
-		this._setDiskProp("tubeRadius", value);
-	}
-	get xyzTubeRadius() {
-		return this._shapes.x.tubeRadius;
-	}
-	set xyzRingRadius(value) {
-		this._setDiskProp("ringRadius", value);
-	}
-	get xyzRingRadius() {
-		return this._shapes.x.ringRadius;
-	}
-	set faceTubeRadius(value) {
-		this._shapes.f.tubeRadius = value;
-	}
-	get faceTubeRadius() {
-		return this._shapes.f.tubeRadius;
-	}
-	set faceRingRadius(value) {
-		this._shapes.f.ringRadius = value;
-	}
-	get faceRingRadius() {
-		return this._shapes.f.ringRadius;
-	}
-	set centerRadius(value) {
-		this._shapes.xyz.radius = value;
-	}
-	get centerRadius() {
-		return this._shapes.xyz.radius;
-	}
-	set ringTolerance(value) {
-		this._setDiskProp("tolerance", value);
-		this._shapes.f.tolerance = value;
-	}
-	get ringTolerance() {
-		return this._shapes.x.tolerance;
-	}
-	set angleGuideThickness(value) {
-		this._guideAngleLines[0].thickness = value;
-		this._guideAngleLines[1].thickness = value;
-	}
-	get angleGuideThickness() {
-		return this._guideAngleLines[0].thickness;
-	}
-	set orbitRotation(value) {
-		this.rotationMode = value ? "orbit" : "absolute";
-	}
-	get orbitRotation() {
-		return this.rotationMode === "orbit";
-	}
-	_setDiskProp(prop, value) {
-		this._shapes.x[prop] = value;
-		this._shapes.y[prop] = value;
-		this._shapes.z[prop] = value;
-	}
-	_storeGuidePoints() {
-		const gizmoPos = this.root.getLocalPosition();
-		const axis = this._selectedAxis;
-		const isFacing = axis === "f";
-		const scale = isFacing ? this.faceRingRadius : this.xyzRingRadius;
-		this._guideAngleStart.copy(this._selectionStartPoint).sub(gizmoPos).normalize();
-		this._guideAngleStart.mulScalar(scale);
-		this._guideAngleEnd.copy(this._guideAngleStart);
-	}
-	_updateGuidePoints(angleDelta) {
-		const axis = this._selectedAxis;
-		const isFacing = axis === "f";
-		if (isFacing) {
-			v1$1.copy(this.facingDir);
-		} else {
-			v1$1.set(0, 0, 0);
-			v1$1[axis] = 1;
-			this._rootStartRot.transformVector(v1$1, v1$1);
-		}
-		q1.setFromAxisAngle(v1$1, angleDelta);
-		q1.transformVector(this._guideAngleStart, this._guideAngleEnd);
-		this._renderUpdate = true;
-	}
-	_angleGuide(state) {
-		const axis = this._selectedAxis;
-		if (state && this.dragMode !== "show" && axis !== "xyz") {
-			const gizmoPos = this.root.getLocalPosition();
-			const baseColor = this._theme.shapeHover[axis];
-			const startColor = color.copy(baseColor);
-			startColor.a *= 0.3;
-			this._guideAngleLines[0].draw(
-				gizmoPos,
-				v1$1.copy(this._guideAngleStart).add(gizmoPos),
-				this._scale,
-				startColor
-			);
-			this._guideAngleLines[1].draw(
-				gizmoPos,
-				v1$1.copy(this._guideAngleEnd).add(gizmoPos),
-				this._scale,
-				baseColor
-			);
-			this._guideAngleLines[0].entity.enabled = true;
-			this._guideAngleLines[1].entity.enabled = true;
-		} else {
-			this._guideAngleLines[0].entity.enabled = false;
-			this._guideAngleLines[1].entity.enabled = false;
-		}
-	}
-	_shapesLookAtCamera() {
-		if (this._camera.projection === PROJECTION_PERSPECTIVE) {
-			const dir = this._camera.entity.getPosition().sub(this.root.getPosition()).normalize();
-			const elev = Math.atan2(-dir.y, Math.sqrt(dir.x * dir.x + dir.z * dir.z)) * math.RAD_TO_DEG;
-			const azim = Math.atan2(-dir.x, -dir.z) * math.RAD_TO_DEG;
-			this._shapes.f.entity.setEulerAngles(-elev + 90, azim, 0);
-		} else {
-			q1.copy(this._camera.entity.getRotation()).getEulerAngles(v1$1);
-			this._shapes.f.entity.setEulerAngles(v1$1);
-			this._shapes.f.entity.rotateLocal(-90, 0, 0);
-		}
-		let angle, dot, sector;
-		const facingDir = v1$1.copy(this.facingDir);
-		q1.copy(this.root.getRotation()).invert().transformVector(facingDir, facingDir);
-		angle = Math.atan2(facingDir.z, facingDir.y) * math.RAD_TO_DEG;
-		this._shapes.x.entity.setLocalEulerAngles(0, angle - 90, -90);
-		angle = Math.atan2(facingDir.x, facingDir.z) * math.RAD_TO_DEG;
-		this._shapes.y.entity.setLocalEulerAngles(0, angle, 0);
-		angle = Math.atan2(facingDir.y, facingDir.x) * math.RAD_TO_DEG;
-		this._shapes.z.entity.setLocalEulerAngles(90, 0, angle + 90);
-		if (!this._dragging) {
-			dot = facingDir.dot(this.root.right);
-			sector = 1 - Math.abs(dot) > RING_FACING_EPSILON;
-			this._shapes.x.show(sector ? "sector" : "ring");
-			dot = facingDir.dot(this.root.up);
-			sector = 1 - Math.abs(dot) > RING_FACING_EPSILON;
-			this._shapes.y.show(sector ? "sector" : "ring");
-			dot = facingDir.dot(this.root.forward);
-			sector = 1 - Math.abs(dot) > RING_FACING_EPSILON;
-			this._shapes.z.show(sector ? "sector" : "ring");
-		}
-		if (!facingDir.equalsApprox(this._facingDir, UPDATE_EPSILON)) {
-			this._facingDir.copy(facingDir);
-			this._renderUpdate = true;
-		}
-	}
-	_drag(state) {
-		for (const axis in this._shapes) {
-			const shape = this._shapes[axis];
-			if (!(shape instanceof ArcShape)) {
-				continue;
-			}
-			switch (this.dragMode) {
-				case "show": {
-					break;
-				}
-				case "hide": {
-					shape.show(state ? axis === this._selectedAxis ? "ring" : "none" : "sector");
-					continue;
-				}
-				case "selected": {
-					shape.show(state ? axis === this._selectedAxis ? "ring" : "sector" : "sector");
-					break;
-				}
-			}
-		}
-		this._renderUpdate = true;
-	}
-	_storeNodeRotations() {
-		const gizmoPos = this.root.getLocalPosition();
-		for (let i = 0; i < this.nodes.length; i++) {
-			const node = this.nodes[i];
-			this._nodeLocalRotations.set(node, node.getLocalRotation().clone());
-			this._nodeRotations.set(node, node.getRotation().clone());
-			this._nodeOffsets.set(node, node.getPosition().clone().sub(gizmoPos));
-		}
-	}
-	_setNodeRotations(axis, angleAxis, angleDelta) {
-		const gizmoPos = this.root.getLocalPosition();
-		q1.setFromAxisAngle(angleAxis, angleDelta);
-		for (let i = 0; i < this.nodes.length; i++) {
-			const node = this.nodes[i];
-			if ((axis === "x" || axis === "y" || axis === "z") && this._coordSpace === "local") {
-				const rot = this._nodeLocalRotations.get(node);
-				if (!rot) {
-					continue;
-				}
-				q2.copy(rot).mul(q1);
-				node.setLocalRotation(q2);
-			} else {
-				const rot = this._nodeRotations.get(node);
-				if (!rot) {
-					continue;
-				}
-				const offset = this._nodeOffsets.get(node);
-				if (!offset) {
-					continue;
-				}
-				v1$1.copy(offset);
-				q1.transformVector(v1$1, v1$1);
-				q2.copy(q1).mul(rot);
-				node.setRotation(q2);
-				node.setPosition(v1$1.add(gizmoPos));
-			}
-		}
-		if (this._coordSpace === "local") {
-			this._updateRotation();
-		}
-	}
-	_screenToPoint(x, y) {
-		const mouseWPos = this._camera.screenToWorld(x, y, 1);
-		const axis = this._selectedAxis;
-		const ray = this._createRay(mouseWPos);
-		const plane = this._createPlane(axis, axis === "f" || axis === "xyz", false);
-		if (!plane.intersectsRay(ray, point$1)) {
-			ray.direction.mulScalar(-1);
-			const intersection = plane.intersectsRay(ray, point$1);
-			ray.direction.mulScalar(-1);
-			if (!intersection) {
-				return point$1.copy(this.root.getLocalPosition());
-			}
-		}
-		return point$1;
-	}
-	_calculateArcAngle(point2, x, y) {
-		const gizmoPos = this.root.getLocalPosition();
-		const axis = this._selectedAxis;
-		const plane = this._createPlane(axis, axis === "f", false);
-		let angle = 0;
-		const facingDir = this.facingDir;
-		const facingDot = plane.normal.dot(facingDir);
-		switch (this.rotationMode) {
-			case "absolute": {
-				this._camera.worldToScreen(gizmoPos, v2$1);
-				if (axis === "f" || facingDot > 1 - RING_FACING_EPSILON) {
-					v1$1.set(
-						this._screenStartPos.y >= v2$1.y ? 1 : -1,
-						this._screenStartPos.x >= v2$1.x ? -1 : 1,
-						0
-					).normalize();
-				} else {
-					const projDir = v1$1.cross(plane.normal, facingDir).normalize();
-					this._camera.worldToScreen(projDir.add(gizmoPos), v3);
-					v1$1.sub2(v3, v2$1).normalize();
-				}
-				v2$1.set(x, y, 0);
-				angle = v1$1.dot(v2$1);
-				break;
-			}
-			case "orbit": {
-				v1$1.sub2(point2, gizmoPos);
-				switch (axis) {
-					case "x": {
-						q1.copy(this._rootStartRot).invert().transformVector(v1$1, v1$1);
-						angle = Math.atan2(v1$1.z, v1$1.y) * math.RAD_TO_DEG;
-						break;
-					}
-					case "y": {
-						q1.copy(this._rootStartRot).invert().transformVector(v1$1, v1$1);
-						angle = Math.atan2(v1$1.x, v1$1.z) * math.RAD_TO_DEG;
-						break;
-					}
-					case "z": {
-						q1.copy(this._rootStartRot).invert().transformVector(v1$1, v1$1);
-						angle = Math.atan2(v1$1.y, v1$1.x) * math.RAD_TO_DEG;
-						break;
-					}
-					case "f": {
-						q1.copy(this._camera.entity.getRotation()).invert().transformVector(v1$1, v1$1);
-						angle = Math.sign(facingDot) * Math.atan2(v1$1.y, v1$1.x) * math.RAD_TO_DEG;
-						break;
-					}
-				}
-				const dir = v1$1.sub2(point2, this._camera.entity.getPosition()).normalize();
-				const dot = dir.dot(this._camera.entity.forward);
-				if (dot < 0) {
-					angle += 180;
-				}
-				break;
-			}
-		}
-		return angle;
-	}
-	_drawGuideLines(pos, rot, activeAxis, activeIsPlane) {
-		for (const axis of AXES) {
-			if (activeAxis === "xyz") {
-				continue;
-			}
-			if (activeIsPlane) {
-				if (axis !== activeAxis) {
-					this._drawSpanLine(pos, rot, axis);
-				}
-			} else {
-				if (axis === activeAxis) {
-					this._drawSpanLine(pos, rot, axis);
-				}
-			}
-		}
-	}
-	prerender() {
-		super.prerender();
-		if (!this.enabled) {
-			return;
-		}
-		this._shapesLookAtCamera();
-	}
-	destroy() {
-		this._guideAngleLines.forEach((line) => line.destroy());
-		super.destroy();
-	}
-}
-
-class BoxShape extends Shape {
-	_size = 0.06;
-	constructor(device, args = {}) {
-		super(device, "boxCenter", args);
-		this._size = args.size ?? this._size;
-		this.triData = [
-			new TriData(new BoxGeometry(), 2)
-		];
-		this._createRenderComponent(this.entity, [
-			Mesh.fromGeometry(this.device, new BoxGeometry())
-		]);
-		this._update();
-	}
-	set size(value) {
-		this._size = value ?? this._size;
-		this._update();
-	}
-	get size() {
-		return this._size;
-	}
-	_update() {
-		this.entity.setLocalScale(this._size, this._size, this._size);
-	}
-}
-
-const tmpV1$1 = new Vec3();
-const tmpV2$1 = new Vec3();
-const tmpQ1 = new Quat();
-class BoxLineShape extends Shape {
-	_gap = 0;
-	_lineThickness = 0.02;
-	_lineLength = 0.5;
-	_boxSize = 0.12;
-	_tolerance = 0.1;
-	_box;
-	_line;
-	_flipped = false;
-	constructor(device, args = {}) {
-		super(device, "boxLine", args);
-		this._gap = args.gap ?? this._gap;
-		this._lineThickness = args.lineThickness ?? this._lineThickness;
-		this._lineLength = args.lineLength ?? this._lineLength;
-		this._boxSize = args.boxSize ?? this._boxSize;
-		this._tolerance = args.tolerance ?? this._tolerance;
-		this.triData = [
-			new TriData(new BoxGeometry()),
-			new TriData(new CylinderGeometry(), 1)
-		];
-		this._box = new Entity(`box:${this.axis}`);
-		this.entity.addChild(this._box);
-		this._createRenderComponent(this._box, [
-			Mesh.fromGeometry(this.device, new BoxGeometry())
-		]);
-		this._line = new Entity(`line:${this.axis}`);
-		this.entity.addChild(this._line);
-		this._createRenderComponent(this._line, [
-			Mesh.fromGeometry(this.device, new CylinderGeometry())
-		]);
-		this._update();
-	}
-	set gap(value) {
-		this._gap = value ?? this._gap;
-		this._update();
-	}
-	get gap() {
-		return this._gap;
-	}
-	set lineThickness(value) {
-		this._lineThickness = value ?? this._lineThickness;
-		this._update();
-	}
-	get lineThickness() {
-		return this._lineThickness;
-	}
-	set lineLength(value) {
-		this._lineLength = value ?? this._lineLength;
-		this._update();
-	}
-	get lineLength() {
-		return this._lineLength;
-	}
-	set boxSize(value) {
-		this._boxSize = value ?? this._boxSize;
-		this._update();
-	}
-	get boxSize() {
-		return this._boxSize;
-	}
-	set tolerance(value) {
-		this._tolerance = value;
-		this._update();
-	}
-	get tolerance() {
-		return this._tolerance;
-	}
-	set flipped(value) {
-		if (this._flipped === value) {
-			return;
-		}
-		this._flipped = value;
-		if (this._rotation.equals(Vec3.ZERO)) {
-			tmpV1$1.set(0, 0, this._flipped ? 180 : 0);
-		} else {
-			tmpV1$1.copy(this._rotation).mulScalar(this._flipped ? -1 : 1);
-		}
-		this._line.enabled = !this._flipped;
-		this.entity.setLocalEulerAngles(tmpV1$1);
-	}
-	get flipped() {
-		return this._flipped;
-	}
-	_update() {
-		tmpV1$1.set(0, this._gap + this._boxSize * 0.5 + this._lineLength, 0);
-		tmpQ1.set(0, 0, 0, 1);
-		tmpV2$1.set(this._boxSize, this._boxSize, this._boxSize);
-		this.triData[0].setTransform(tmpV1$1, tmpQ1, tmpV2$1);
-		tmpV1$1.set(0, this._gap + this._lineLength * 0.5, 0);
-		tmpQ1.set(0, 0, 0, 1);
-		tmpV2$1.set(this._lineThickness + this._tolerance, this._lineLength, this._lineThickness + this._tolerance);
-		this.triData[1].setTransform(tmpV1$1, tmpQ1, tmpV2$1);
-		this._box.setLocalPosition(0, this._gap + this._boxSize * 0.5 + this._lineLength, 0);
-		this._box.setLocalScale(this._boxSize, this._boxSize, this._boxSize);
-		this._line.setLocalPosition(0, this._gap + this._lineLength * 0.5, 0);
-		this._line.setLocalScale(this._lineThickness, this._lineLength, this._lineThickness);
-	}
-}
-
-const v1 = new Vec3();
-const v2 = new Vec3();
-const point = new Vec3();
-const delta = new Vec3();
-const q = new Quat();
-const GLANCE_EPSILON = 0.01;
-class ScaleGizmo extends TransformGizmo {
-	_shapes = {
-		xyz: new BoxShape(this._device, {
-			axis: "xyz",
-			layers: [this._layer.id],
-			defaultColor: this._theme.shapeBase.xyz,
-			hoverColor: this._theme.shapeHover.xyz,
-			disabledColor: this._theme.disabled
-		}),
-		yz: new PlaneShape(this._device, {
-			axis: "x",
-			layers: [this._layer.id],
-			rotation: new Vec3(0, 0, -90),
-			defaultColor: this._theme.shapeBase.x,
-			hoverColor: this._theme.shapeHover.x,
-			disabledColor: this._theme.disabled,
-			depth: 1
-		}),
-		xz: new PlaneShape(this._device, {
-			axis: "y",
-			layers: [this._layer.id],
-			rotation: new Vec3(0, 0, 0),
-			defaultColor: this._theme.shapeBase.y,
-			hoverColor: this._theme.shapeHover.y,
-			disabledColor: this._theme.disabled,
-			depth: 1
-		}),
-		xy: new PlaneShape(this._device, {
-			axis: "z",
-			layers: [this._layer.id],
-			rotation: new Vec3(90, 0, 0),
-			defaultColor: this._theme.shapeBase.z,
-			hoverColor: this._theme.shapeHover.z,
-			disabledColor: this._theme.disabled,
-			depth: 1
-		}),
-		x: new BoxLineShape(this._device, {
-			axis: "x",
-			layers: [this._layer.id],
-			rotation: new Vec3(0, 0, -90),
-			defaultColor: this._theme.shapeBase.x,
-			hoverColor: this._theme.shapeHover.x,
-			disabledColor: this._theme.disabled
-		}),
-		y: new BoxLineShape(this._device, {
-			axis: "y",
-			layers: [this._layer.id],
-			rotation: new Vec3(0, 0, 0),
-			defaultColor: this._theme.shapeBase.y,
-			hoverColor: this._theme.shapeHover.y,
-			disabledColor: this._theme.disabled
-		}),
-		z: new BoxLineShape(this._device, {
-			axis: "z",
-			layers: [this._layer.id],
-			rotation: new Vec3(90, 0, 0),
-			defaultColor: this._theme.shapeBase.z,
-			hoverColor: this._theme.shapeHover.z,
-			disabledColor: this._theme.disabled
-		})
-	};
-	_coordSpace = "local";
-	_nodeScales = /* @__PURE__ */ new Map();
-	_uniform = false;
-	snapIncrement = 1;
-	flipPlanes = true;
-	lowerBoundScale = new Vec3(-Infinity, -Infinity, -Infinity);
-	constructor(camera, layer) {
-		super(camera, layer, "gizmo:scale");
-		this._createTransform();
-		this.on(TransformGizmo.EVENT_TRANSFORMSTART, () => {
-			this._storeNodeScales();
-			this._drag(true);
-		});
-		this.on(TransformGizmo.EVENT_TRANSFORMMOVE, (point2) => {
-			const scaleDelta = delta.copy(point2).sub(this._selectionStartPoint);
-			if (this.snap) {
-				scaleDelta.mulScalar(1 / this.snapIncrement);
-				scaleDelta.round();
-				scaleDelta.mulScalar(this.snapIncrement);
-			}
-			scaleDelta.mulScalar(1 / this._scale);
-			this._setNodeScales(scaleDelta.add(Vec3.ONE));
-		});
-		this.on(TransformGizmo.EVENT_TRANSFORMEND, () => {
-			this._drag(false);
-		});
-		this.on(TransformGizmo.EVENT_NODESDETACH, () => {
-			this._nodeScales.clear();
-		});
-	}
-	set coordSpace(value) {
-	}
-	get coordSpace() {
-		return this._coordSpace;
-	}
-	set uniform(value) {
-		this._uniform = value ?? this._uniform;
-	}
-	get uniform() {
-		return this._uniform;
-	}
-	set axisGap(value) {
-		this._setArrowProp("gap", value);
-	}
-	get axisGap() {
-		return this._shapes.x.gap;
-	}
-	set axisLineThickness(value) {
-		this._setArrowProp("lineThickness", value);
-	}
-	get axisLineThickness() {
-		return this._shapes.x.lineThickness;
-	}
-	set axisLineLength(value) {
-		this._setArrowProp("lineLength", value);
-	}
-	get axisLineLength() {
-		return this._shapes.x.lineLength;
-	}
-	set axisLineTolerance(value) {
-		this._setArrowProp("tolerance", value);
-	}
-	get axisLineTolerance() {
-		return this._shapes.x.tolerance;
-	}
-	set axisBoxSize(value) {
-		this._setArrowProp("boxSize", value);
-	}
-	get axisBoxSize() {
-		return this._shapes.x.boxSize;
-	}
-	set axisPlaneSize(value) {
-		this._setPlaneProp("size", value);
-	}
-	get axisPlaneSize() {
-		return this._shapes.yz.size;
-	}
-	set axisPlaneGap(value) {
-		this._setPlaneProp("gap", value);
-	}
-	get axisPlaneGap() {
-		return this._shapes.yz.gap;
-	}
-	set axisCenterSize(value) {
-		this._shapes.xyz.size = value;
-	}
-	get axisCenterSize() {
-		return this._shapes.xyz.size;
-	}
-	set flipShapes(value) {
-		this.flipPlanes = value;
-	}
-	get flipShapes() {
-		return this.flipPlanes;
-	}
-	_setArrowProp(prop, value) {
-		this._shapes.x[prop] = value;
-		this._shapes.y[prop] = value;
-		this._shapes.z[prop] = value;
-	}
-	_setPlaneProp(prop, value) {
-		this._shapes.yz[prop] = value;
-		this._shapes.xz[prop] = value;
-		this._shapes.xy[prop] = value;
-	}
-	_shapesLookAtCamera() {
-		const cameraDir = this.cameraDir;
-		let changed = false;
-		let dot, enabled;
-		dot = cameraDir.dot(this.root.right);
-		enabled = 1 - Math.abs(dot) > GLANCE_EPSILON;
-		if (this._shapes.x.entity.enabled !== enabled) {
-			this._shapes.x.entity.enabled = enabled;
-			changed = true;
-		}
-		dot = cameraDir.dot(this.root.up);
-		enabled = 1 - Math.abs(dot) > GLANCE_EPSILON;
-		if (this._shapes.y.entity.enabled !== enabled) {
-			this._shapes.y.entity.enabled = enabled;
-			changed = true;
-		}
-		dot = cameraDir.dot(this.root.forward);
-		enabled = 1 - Math.abs(dot) > GLANCE_EPSILON;
-		if (this._shapes.z.entity.enabled !== enabled) {
-			this._shapes.z.entity.enabled = enabled;
-			changed = true;
-		}
-		let flipped;
-		v1.cross(cameraDir, this.root.right);
-		enabled = 1 - v1.length() > GLANCE_EPSILON;
-		if (this._shapes.yz.entity.enabled !== enabled) {
-			this._shapes.yz.entity.enabled = enabled;
-			changed = true;
-		}
-		flipped = this.flipPlanes ? v2.set(0, +(v1.dot(this.root.forward) < 0), +(v1.dot(this.root.up) < 0)) : Vec3.ZERO;
-		if (!this._shapes.yz.flipped.equals(flipped)) {
-			this._shapes.yz.flipped = flipped;
-			changed = true;
-		}
-		v1.cross(cameraDir, this.root.forward);
-		enabled = 1 - v1.length() > GLANCE_EPSILON;
-		if (this._shapes.xy.entity.enabled !== enabled) {
-			this._shapes.xy.entity.enabled = enabled;
-			changed = true;
-		}
-		flipped = this.flipPlanes ? v2.set(+(v1.dot(this.root.up) < 0), +(v1.dot(this.root.right) > 0), 0) : Vec3.ZERO;
-		if (!this._shapes.xy.flipped.equals(flipped)) {
-			this._shapes.xy.flipped = flipped;
-			changed = true;
-		}
-		v1.cross(cameraDir, this.root.up);
-		enabled = 1 - v1.length() > GLANCE_EPSILON;
-		if (this._shapes.xz.entity.enabled !== enabled) {
-			this._shapes.xz.entity.enabled = enabled;
-			changed = true;
-		}
-		flipped = this.flipPlanes ? v2.set(+(v1.dot(this.root.forward) > 0), 0, +(v1.dot(this.root.right) > 0)) : Vec3.ZERO;
-		if (!this._shapes.xz.flipped.equals(flipped)) {
-			this._shapes.xz.flipped = flipped;
-			changed = true;
-		}
-		if (changed) {
-			this._renderUpdate = true;
-		}
-	}
-	_drag(state) {
-		for (const axis in this._shapes) {
-			const shape = this._shapes[axis];
-			switch (this.dragMode) {
-				case "show": {
-					continue;
-				}
-				case "hide": {
-					shape.visible = !state;
-					continue;
-				}
-				case "selected": {
-					if (this._selectedAxis === "xyz") {
-						shape.visible = state ? axis.length === 1 : true;
-						continue;
-					}
-					if (this._selectedIsPlane) {
-						shape.visible = state ? axis.length === 1 && !axis.includes(this._selectedAxis) : true;
-						continue;
-					}
-					shape.visible = state ? axis === this._selectedAxis : true;
-					continue;
-				}
-			}
-		}
-		this._renderUpdate = true;
-	}
-	_storeNodeScales() {
-		for (let i = 0; i < this.nodes.length; i++) {
-			const node = this.nodes[i];
-			this._nodeScales.set(node, node.getLocalScale().clone());
-		}
-	}
-	_setNodeScales(scaleDelta) {
-		for (let i = 0; i < this.nodes.length; i++) {
-			const node = this.nodes[i];
-			const scale = this._nodeScales.get(node);
-			if (!scale) {
-				continue;
-			}
-			node.setLocalScale(v1.copy(scale).mul(scaleDelta).max(this.lowerBoundScale));
-		}
-	}
-	_screenToPoint(x, y) {
-		const gizmoPos = this.root.getLocalPosition();
-		const mouseWPos = this._camera.screenToWorld(x, y, 1);
-		const axis = this._selectedAxis;
-		const isPlane = this._selectedIsPlane;
-		const ray = this._createRay(mouseWPos);
-		const plane = this._createPlane(axis, axis === "xyz", !isPlane);
-		if (!plane.intersectsRay(ray, point)) {
-			return point;
-		}
-		if (axis === "xyz") {
-			const projDir = v2.add2(this._camera.entity.up, this._camera.entity.right).normalize();
-			const dir = v1.sub2(point, gizmoPos);
-			const v = dir.length() * dir.normalize().dot(projDir);
-			point.set(v, v, v);
-			return point;
-		}
-		q.copy(this._rootStartRot).invert().transformVector(point, point);
-		if (!isPlane) {
-			this._projectToAxis(point, axis);
-		}
-		if (this._uniform && isPlane) {
-			v1.set(1, 1, 1);
-			v1[axis] = 0;
-			point.copy(v1.mulScalar(v1.dot(point)));
-			point[axis] = 0;
-		}
-		return point;
-	}
-	prerender() {
-		super.prerender();
-		if (!this.enabled) {
-			return;
-		}
-		this._shapesLookAtCamera();
-	}
-}
 
 class App extends AppBase {
     constructor(canvas, options) {
@@ -89265,7 +86765,6 @@ class WallOverlay {
     }
 }
 
-const MIN_SIZE = 0.2;
 const EDGE = 0.008;
 // The twelve edges, as the axis each runs along and its offset (in half-sizes) on the others.
 const EDGES = [];
@@ -89294,19 +86793,15 @@ const seeThrough = (color, opacity) => {
     return material;
 };
 /**
- * Gaussian Studio: the editor's boundary box, a see-through cyan box with the engine's move,
- * resize and turn handles (turning only about the vertical). Never used for visitors. While a
- * handle is dragged, `hold` is true so the camera ignores that drag.
+ * Gaussian Studio: the editor's preview of the scene's edge, a see-through cyan box with bright
+ * edges drawn over the splat. Never used for visitors.
  */
 class BoxOverlay {
     app;
     layer;
     box;
     edges;
-    gizmos;
-    tool = null;
-    onChange = null;
-    constructor(app, camera, hold) {
+    constructor(app, camera) {
         this.app = app;
         this.layer = new Layer({
             name: 'BoxOverlay',
@@ -89318,12 +86813,12 @@ class BoxOverlay {
         app.scene.layers.push(this.layer);
         camera.camera.layers = [...camera.camera.layers, this.layer.id];
         const cyan = new Color(0.2, 0.85, 1);
-        this.box = new Entity('BoundaryBox', app);
-        this.box.addComponent('render', { type: 'box', material: seeThrough(cyan, 0.1), layers: [this.layer.id] });
+        this.box = new Entity('SceneEdge', app);
+        this.box.addComponent('render', { type: 'box', material: seeThrough(cyan, 0.08), layers: [this.layer.id] });
         this.box.enabled = false;
         app.root.addChild(this.box);
         // the edges follow the box's place and turn but not its scale, so they stay thin
-        this.edges = new Entity('BoundaryBoxEdges', app);
+        this.edges = new Entity('SceneEdgeLines', app);
         const edgeMaterial = seeThrough(cyan, 0.9);
         for (let i = 0; i < EDGES.length; i++) {
             const edge = new Entity('Edge', app);
@@ -89332,33 +86827,9 @@ class BoxOverlay {
         }
         this.edges.enabled = false;
         app.root.addChild(this.edges);
-        const gizmoLayer = Gizmo.createLayer(app, 'BoxGizmo');
-        camera.camera.layers = [...camera.camera.layers, gizmoLayer.id];
-        const translate = new TranslateGizmo(camera.camera, gizmoLayer);
-        const scale = new ScaleGizmo(camera.camera, gizmoLayer);
-        scale.coordSpace = 'local';
-        const rotate = new RotateGizmo(camera.camera, gizmoLayer);
-        for (const shape of ['x', 'z', 'face', 'xyz']) {
-            try {
-                rotate.enableShape(shape, false);
-            }
-            catch {
-                // not every gizmo version has every shape
-            }
-        }
-        this.gizmos = { move: translate, resize: scale, turn: rotate };
-        for (const gizmo of Object.values(this.gizmos)) {
-            gizmo.on(TransformGizmo.EVENT_TRANSFORMSTART, () => hold(true));
-            gizmo.on(TransformGizmo.EVENT_TRANSFORMMOVE, () => this._changed());
-            gizmo.on(TransformGizmo.EVENT_TRANSFORMEND, () => {
-                hold(false);
-                this._changed();
-            });
-        }
     }
-    /** Show the box with one tool's handles (or none), or hide it with null. */
-    set(box, tool, onChange) {
-        this.onChange = onChange;
+    /** Show the box, or hide it with null. */
+    set(box) {
         this.box.enabled = Boolean(box);
         this.edges.enabled = Boolean(box);
         if (box) {
@@ -89367,14 +86838,6 @@ class BoxOverlay {
             this.box.setLocalScale(...box.size);
             this._layoutEdges();
         }
-        const next = box ? tool : null;
-        if (next !== this.tool) {
-            if (this.tool)
-                this.gizmos[this.tool].detach();
-            if (next)
-                this.gizmos[next].attach([this.box]);
-            this.tool = next;
-        }
         this.app.renderNextFrame = true;
     }
     _layoutEdges() {
@@ -89382,32 +86845,20 @@ class BoxOverlay {
         this.edges.setRotation(this.box.getRotation());
         const s = this.box.getLocalScale();
         const size = [s.x, s.y, s.z];
+        // thicker for a big scene, so the lines stay visible from far away
+        const thick = Math.max(EDGE, 0.002 * Math.max(...size));
         this.edges.children.forEach((child, i) => {
             const [axis, a, b] = EDGES[i];
             const [u, v] = [0, 1, 2].filter((k) => k !== axis);
             const position = [0, 0, 0];
-            const scale = [EDGE, EDGE, EDGE];
+            const scale = [thick, thick, thick];
             position[u] = (a * size[u]) / 2;
             position[v] = (b * size[v]) / 2;
-            scale[axis] = size[axis] + EDGE;
+            scale[axis] = size[axis] + thick;
             const edge = child;
             edge.setLocalPosition(position[0], position[1], position[2]);
             edge.setLocalScale(scale[0], scale[1], scale[2]);
         });
-    }
-    _changed() {
-        const p = this.box.getPosition();
-        const s = this.box.getLocalScale();
-        if (s.x < MIN_SIZE || s.y < MIN_SIZE || s.z < MIN_SIZE) {
-            this.box.setLocalScale(Math.max(s.x, MIN_SIZE), Math.max(s.y, MIN_SIZE), Math.max(s.z, MIN_SIZE));
-        }
-        const size = this.box.getLocalScale();
-        this._layoutEdges();
-        // the yaw from the box's x axis, which a turn of t points at (cos t, 0, -sin t)
-        const right = this.box.right;
-        const yaw = (Math.atan2(-right.z, right.x) * 180) / Math.PI;
-        this.app.renderNextFrame = true;
-        this.onChange?.({ center: [p.x, p.y, p.z], size: [size.x, size.y, size.z], yaw });
     }
 }
 
@@ -93606,6 +91057,9 @@ class CameraManager {
     // arrives late. It re-tests whether walk mode is allowed, which gates the walk toggle
     // and the mode the camera falls back to when an animation is interrupted.
     setCollision;
+    // Gaussian Studio: set (or clear) the scene's soft edge after construction; the automatic
+    // edge is computed from the splat once it has loaded.
+    setBox;
     // holds the camera state
     camera = new Camera();
     constructor(global, bbox, collision = null) {
@@ -93655,7 +91109,7 @@ class CameraManager {
         // For visitors (the editor passes no limits, so it moves freely): the soft box holds
         // every mode. The orbit camera bumps into the scene, the walls and the fence only when
         // the scene asks for it; walking always does, flying unless it is turned off.
-        const box = limits?.box ?? null;
+        let box = limits?.box ?? null;
         controllers.walk.box = box;
         controllers.fly.box = box;
         const orbitWalls = Boolean(limits?.walk?.holdOrbit);
@@ -93729,6 +91183,14 @@ class CameraManager {
             transitionTurnEase = turnEase;
         };
         this.transitionProgress = () => (transitionTimer < 1 ? transitionEase(transitionTimer) : 1);
+        this.setBox = (value) => {
+            box = value;
+            controllers.walk.box = value;
+            controllers.fly.box = value;
+            if (controllers.orbit.barriers) {
+                controllers.orbit.barriers.box = value;
+            }
+        };
         this.setCollision = (value) => {
             controllers.fly.collision = flyCollides ? value : null;
             controllers.walk.collision = value;
@@ -93749,12 +91211,6 @@ class CameraManager {
             const prevTransitionTimer = transitionTimer;
             transitionTimer = Math.min(1, transitionTimer + deltaTime / transitionDuration);
             const controller = getController(state.cameraMode);
-            // Gaussian Studio: a drag on one of the editor's box handles is not a camera move
-            if (global.inputHold) {
-                for (const delta of [frame.deltas.move, frame.deltas.rotate]) {
-                    delta._value.fill(0);
-                }
-            }
             sourcesByMode[state.cameraMode]?.update(dt, this.camera, frame);
             controller.update(dt, frame, target);
             if (transitionTimer < 1) {
@@ -101175,6 +98631,64 @@ class StochasticSplatRenderer {
     }
 }
 
+// The share of splats left outside on each side of each axis: stray floaters live there.
+const TRIM = { tight: 0.02, normal: 0.005, loose: 0.002 };
+// Room added beyond the dense part, as a share of its size on that axis.
+const MARGIN = 0.08;
+const MAX_SAMPLES = 200000;
+/** Every block of splat centres the engine holds for this splat (a streamed one holds several). */
+const centerBlocks = (entity) => {
+    const resource = entity.gsplat.resource;
+    if (!resource)
+        return [];
+    if (resource.octree?.fileResources) {
+        return [...resource.octree.fileResources.values()].map((r) => r.centers).filter((c) => !!c);
+    }
+    return resource.centers ? [resource.centers] : [];
+};
+/**
+ * Gaussian Studio: the automatic scene edge, a box around the dense part of the splat in world
+ * space: per axis, the splat centres from `trim` to `1 - trim`, plus a small margin. Computed
+ * from a sample of the centres the engine has loaded (for a streamed splat, the coarse level is
+ * enough). Null until centres are loaded.
+ */
+const sceneEdge = (entity, tightness = 'normal') => {
+    const blocks = centerBlocks(entity);
+    const total = blocks.reduce((sum, block) => sum + block.length / 3, 0);
+    if (total < 100)
+        return null;
+    const stride = Math.max(1, Math.floor(total / MAX_SAMPLES));
+    const count = Math.floor(total / stride);
+    const axes = [new Float32Array(count), new Float32Array(count), new Float32Array(count)];
+    const world = entity.getWorldTransform();
+    const p = new Vec3();
+    let n = 0;
+    let skip = 0;
+    for (const block of blocks) {
+        for (let i = 0; i < block.length && n < count; i += 3) {
+            if (skip++ % stride)
+                continue;
+            world.transformPoint(p.set(block[i], block[i + 1], block[i + 2]), p);
+            axes[0][n] = p.x;
+            axes[1][n] = p.y;
+            axes[2][n] = p.z;
+            n++;
+        }
+    }
+    const trim = TRIM[tightness];
+    const center = [0, 0, 0];
+    const size = [0, 0, 0];
+    for (let a = 0; a < 3; a++) {
+        const sorted = axes[a].subarray(0, n).sort();
+        const lo = sorted[Math.floor(trim * (n - 1))];
+        const hi = sorted[Math.ceil((1 - trim) * (n - 1))];
+        const pad = (hi - lo) * MARGIN;
+        center[a] = (lo + hi) / 2;
+        size[a] = Math.max(0.5, hi - lo + 2 * pad);
+    }
+    return { center, size, yaw: 0 };
+};
+
 // ---------------------------------------------------------------------------
 // WGSL compute shader: ray-march through the sparse voxel octree per pixel
 // ---------------------------------------------------------------------------
@@ -104446,6 +101960,8 @@ class Viewer {
     cameraFrame;
     inputController;
     cameraManager;
+    // Gaussian Studio: the splat, for computing the scene's automatic edge
+    splatEntity = null;
     picker;
     voxelOverlay = null;
     meshOverlay = null;
@@ -104752,6 +102268,25 @@ class Viewer {
             events.fire('picker:ready', this.picker);
             this.inputController = new InputController(global, this.picker);
             this.cameraManager = new CameraManager(global, sceneBound);
+            this.splatEntity = results[0];
+            // Gaussian Studio: the scene's soft edge, from the splat once its centres are in
+            // (for visitors: the editor passes no limits). A hand-set box wins.
+            const edge = config.limits?.edge ?? 'normal';
+            if (config.limits && !config.limits.box && edge !== 'off') {
+                let tries = 0;
+                const findEdge = () => {
+                    if (this.destroyed)
+                        return;
+                    const box = this.sceneEdge(edge);
+                    if (box) {
+                        this.cameraManager.setBox(box);
+                    }
+                    else if (++tries < 30) {
+                        setTimeout(findEdge, 1000);
+                    }
+                };
+                findEdge();
+            }
             applyCamera(this.cameraManager.camera);
             if (config.ui) {
                 this.navCursor = new NavCursor(app, camera, null, events, state, config.reticle);
@@ -104906,6 +102441,10 @@ class Viewer {
     toggleWalk() {
         this.requireLoaded('toggleWalk');
         this.global.events.fire('inputEvent', 'toggleWalk');
+    }
+    /** Gaussian Studio: the automatic scene edge for a tightness, or null before the splat loads. */
+    sceneEdge(tightness = 'normal') {
+        return this.splatEntity ? sceneEdge(this.splatEntity, tightness) : null;
     }
     selectAnnotation(index) {
         this.requireLoaded('selectAnnotation');
@@ -105619,11 +103158,10 @@ const createViewer = async (options) => {
             wallOverlay ??= new WallOverlay(app, camera);
             wallOverlay.set(walls);
         },
-        editBox: (box, tool, onChange) => {
-            boxOverlay ??= new BoxOverlay(app, camera, (hold) => {
-                global.inputHold = hold;
-            });
-            boxOverlay.set(box, tool, onChange ?? null);
+        sceneEdge: (tightness) => viewer.sceneEdge(tightness),
+        showEdge: (box) => {
+            boxOverlay ??= new BoxOverlay(app, camera);
+            boxOverlay.set(box);
         },
         pick: async (x, y) => {
             const hit = await viewer.picker?.pick(x, y);
