@@ -23,16 +23,30 @@
 
             <section>
                 <h2>Visitors get</h2>
-                <div class="segmented" role="radiogroup" aria-label="Camera mode for visitors">
-                    <label><input type="radio" name="mode" value="orbit" /> Orbit</label>
-                    <label><input type="radio" name="mode" value="walk" /> Walk</label>
-                    <label><input type="radio" name="mode" value="" /> Free</label>
+                <div class="segmented" role="group" aria-label="Camera modes for visitors">
+                    <label><input type="checkbox" name="modes" value="orbit" /> Orbit</label>
+                    <label><input type="checkbox" name="modes" value="walk" /> Walk</label>
+                    <label><input type="checkbox" name="modes" value="fly" /> Fly</label>
+                </div>
+                <div class="row" id="start-row">
+                    <label for="start-mode">Starts in</label>
+                    <select id="start-mode"></select>
                 </div>
                 <p class="hint" id="mode-hint"></p>
             </section>
 
             <section id="orbit-tools" hidden>
                 <h2>Orbit limits</h2>
+                <div class="row">
+                    <span>Orbit point</span>
+                    <button id="orbit-point">Use the current focus</button>
+                    <button class="quiet" id="clear-orbit-point">Clear</button>
+                </div>
+                <output id="out-orbit-point"></output>
+                <p class="hint">
+                    A fixed point visitors orbit; they cannot pan or click a new one. Click the subject
+                    first so the view circles it. Annotations still open, and closing one comes back here.
+                </p>
                 <p class="hint">Move the view to the edge you want, then press the matching button.</p>
                 <div class="grid">
                     <span>Turn</span>
@@ -67,6 +81,8 @@
                     The collision already stops visitors at buildings, planters and walls. Close the
                     openings you don't want them to use: walk into one, face out of the area, and press
                     Block this way. The wall reaches sideways until it meets something on each side.
+                    Walls and the fence stop the orbit camera too: visitors cannot zoom, pan or turn
+                    it through them.
                 </p>
                 <div class="row">
                     <button id="block-way">Block this way</button>
@@ -90,6 +106,24 @@
                 <output id="out-fence"></output>
             </section>
 
+            <section id="box-tools">
+                <h2>Boundary box</h2>
+                <p class="hint">
+                    Visitors' cameras stay inside the box in every mode: they cannot orbit, zoom, pan,
+                    walk or fly out of it. Use it where the splat's edges or stray floaters let them
+                    get away. Add one where you are, then drag its handles.
+                </p>
+                <div class="row">
+                    <button id="box-add">Add a box here</button>
+                    <button class="quiet" id="box-remove">Remove</button>
+                </div>
+                <div class="segmented" id="box-tool" role="radiogroup" aria-label="Box handles">
+                    <label><input type="radio" name="box-tool" value="move" /> Move</label>
+                    <label><input type="radio" name="box-tool" value="resize" /> Resize</label>
+                    <label><input type="radio" name="box-tool" value="turn" /> Turn</label>
+                </div>
+                <output id="out-box"></output>
+            </section>
             <section>
                 <h2>Start view</h2>
                 <div class="row">

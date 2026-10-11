@@ -55,14 +55,34 @@ const yawRange = (a, b, inside) => {
 
 const sorted = (a, b) => (a <= b ? [a, b] : [b, a]);
 
+const MODES = ['orbit', 'walk', 'fly'];
+const MODE_LABELS = { orbit: 'Orbit', walk: 'Walk', fly: 'Fly' };
+
+// The modes visitors get, in a fixed order, and the one they start in. All three with no
+// start chosen is the stock viewer: every mode and its intro animation.
+const allowed = () => MODES.filter((mode) => draft.modes.includes(mode));
+const startMode = () => {
+    const modes = allowed();
+    if (modes.length === MODES.length && !draft.mode) return null;
+    return modes.includes(draft.mode) ? draft.mode : modes[0];
+};
+
 const buildLimits = () => {
     const m = draft.marks;
     const limits = {};
-    if (draft.mode) {
-        limits.mode = draft.mode;
+    const modes = allowed();
+    const start = startMode();
+    if (start) {
+        limits.mode = start;
+        if (modes.length > 1) {
+            limits.modes = modes;
+        }
     }
-    if (draft.mode === 'orbit') {
+    if (modes.includes('orbit')) {
         const orbit = {};
+        if (draft.orbitTarget) {
+            orbit.target = draft.orbitTarget.map((v) => round(v, 3));
+        }
         if (m.left !== undefined && m.right !== undefined) {
             orbit.yaw = yawRange(m.left, m.right, draft.startYaw).map((v) => round(v, 1));
         }
@@ -77,9 +97,19 @@ const buildLimits = () => {
         } else if (draft.pan === 'box' && draft.panBox) {
             orbit.pan = draft.panBox.map((v) => round(v, 3));
         }
-        limits.orbit = orbit;
+        if (Object.keys(orbit).length || start === 'orbit') {
+            limits.orbit = orbit;
+        }
     }
-    if (draft.mode === 'walk') {
+    if (draft.box) {
+        limits.box = {
+            center: draft.box.center.map((v) => round(v, 3)),
+            size: draft.box.size.map((v) => round(v, 3)),
+            yaw: round(draft.box.yaw ?? 0, 1)
+        };
+    }
+    // walls and the fence hold walking and the orbit camera
+    if (modes.includes('walk') || modes.includes('orbit')) {
         const walk = {};
         if (draft.fence.length >= 3) {
             walk.fence = draft.fence.map(([x, z]) => [round(x, 3), round(z, 3)]);
@@ -126,6 +156,7 @@ const restartViewer = async () => {
     });
     window.viewer = viewer;
     drawWalls();
+    drawBox();
     // Skip the intro animation: it would swallow the first button press, and dragging during it
     // drops into fly mode with the mouse captured. The camera is set up once the scene has
     // loaded, so switch then.
@@ -133,7 +164,7 @@ const restartViewer = async () => {
         const current = viewer;
         const leaveAnimation = () => {
             if (current === viewer && viewer.state.cameraMode === 'anim') {
-                viewer.state.cameraMode = draft.mode === 'walk' ? (viewer.state.walkAllowed ? 'walk' : 'fly') : 'orbit';
+                viewer.state.cameraMode = startMode() === 'walk' ? (viewer.state.walkAllowed ? 'walk' : 'fly') : 'orbit';
             }
         };
         viewer.events.on('cameraMode:changed', (mode) => mode === 'anim' && setTimeout(leaveAnimation, 0));
@@ -143,6 +174,20 @@ const restartViewer = async () => {
 };
 
 const pose = () => viewer?.cameraPose();
+
+// The boundary box with its handles, while editing only.
+const describeBox = (box) =>
+    box
+        ? `${box.size.map((v) => round(v, 1)).join(' × ')} m, turned ${round(box.yaw ?? 0, 0)}°`
+        : 'No box: the splat\'s own bounds hold the orbit camera.';
+const drawBox = () => {
+    if (!viewer?.editBox) return;
+    viewer.editBox(previewing ? null : draft.box, draft.boxTool, (box) => {
+        draft.box = box;
+        saveDraft();
+        $('#out-box').textContent = describeBox(box);
+    });
+};
 
 // The walls as orange panels, while editing only (visitors never see them).
 const drawWalls = () => {
@@ -220,16 +265,40 @@ const describe = (pair, unit) => (pair ? `${pair[0]}${unit} to ${pair[1]}${unit}
 
 const render = () => {
     const limits = buildLimits();
-    for (const input of document.querySelectorAll('input[name="mode"]')) {
-        input.checked = input.value === (draft.mode ?? '');
+    const modes = allowed();
+    const startIn = startMode();
+    for (const input of document.querySelectorAll('input[name="modes"]')) {
+        input.checked = modes.includes(input.value);
+        // at least one mode: the last ticked one cannot be unticked
+        input.disabled = modes.length === 1 && input.checked;
     }
-    $('#orbit-tools').hidden = draft.mode !== 'orbit';
-    $('#walk-tools').hidden = draft.mode !== 'walk';
-    $('#mode-hint').textContent = {
-        orbit: 'Visitors circle a focus point, within the limits below. No walking or flying.',
-        walk: 'Visitors walk at eye height and cannot leave the fence. No orbit or flying.',
-        '': 'Visitors can switch freely between orbit, fly and walk. No limits.'
-    }[draft.mode ?? ''];
+    const select = $('#start-mode');
+    select.replaceChildren(
+        ...(modes.length === MODES.length ? [new Option('Automatic (with the intro animation)', '')] : []),
+        ...modes.map((mode) => new Option(MODE_LABELS[mode], mode))
+    );
+    select.value = startIn ?? '';
+    $('#start-row').hidden = modes.length < 2;
+    $('#orbit-tools').hidden = !modes.includes('orbit');
+    $('#walk-tools').hidden = !modes.includes('walk') && !modes.includes('orbit');
+    const names = modes.map((mode) => MODE_LABELS[mode].toLowerCase());
+    $('#mode-hint').textContent = !startIn
+        ? 'Visitors switch freely between orbit, walk and fly and get the intro animation. Limits still apply.'
+        : modes.length === 1
+          ? `Visitors only ${names[0]}, within the limits below. The animation is a Tour button.`
+          : `Visitors start in ${MODE_LABELS[startIn].toLowerCase()} and can switch to ${names.filter((n) => n !== MODE_LABELS[startIn].toLowerCase()).join(' and ')}. The animation is a Tour button.`;
+    $('#out-orbit-point').textContent = draft.orbitTarget
+        ? `fixed at ${draft.orbitTarget.map((v) => round(v, 2)).join(', ')}`
+        : 'not fixed: visitors can pan and click a new point';
+    $('#pan').disabled = Boolean(draft.orbitTarget);
+    for (const input of document.querySelectorAll('input[name="box-tool"]')) {
+        input.checked = input.value === draft.boxTool;
+        input.disabled = !draft.box;
+    }
+    $('#box-remove').hidden = !draft.box;
+    $('#box-add').textContent = draft.box ? 'Move the box here' : 'Add a box here';
+    $('#out-box').textContent = describeBox(draft.box);
+    drawBox();
 
     const m = draft.marks;
     const partial = (a, b) => (a !== undefined && b === undefined) || (a === undefined && b !== undefined);
@@ -408,11 +477,23 @@ const annotationLimitsControls = (annotation, index) => {
 const annotationWarning = (annotation, limits) => {
     const view = annotation.extras?.view;
     const own = annotation.extras?.limits ?? {};
+    // the flight to an annotation's view is not held by the box: keep the view inside it
+    const from = annotation.camera?.initial?.position;
+    if (from && limits.box) {
+        const { center, size, yaw = 0 } = limits.box;
+        const t = (yaw * Math.PI) / 180;
+        const dx = from[0] - center[0];
+        const dz = from[2] - center[2];
+        const local = [dx * Math.cos(t) - dz * Math.sin(t), from[1] - center[1], dx * Math.sin(t) + dz * Math.cos(t)];
+        if (local.some((v, i) => Math.abs(v) > size[i] / 2)) {
+            return 'Its view is outside the boundary box; re-save it from inside, or grow the box.';
+        }
+    }
     if (view && (view.distance < (own.closest ?? 0) * 0.98 || view.distance > (own.furthest ?? Infinity) * 1.02)) {
         return 'Its view is outside its own zoom limits; re-save it, or record the limits again.';
     }
     const orbit = limits.orbit;
-    if (!view || limits.mode !== 'orbit' || !orbit) {
+    if (!view || !orbit) {
         return '';
     }
     const outside = [];
@@ -439,18 +520,61 @@ const wire = () => {
         $('#panel').addEventListener(type, (event) => event.stopPropagation());
     }
 
-    for (const input of document.querySelectorAll('input[name="mode"]')) {
+    for (const input of document.querySelectorAll('input[name="modes"]')) {
         input.addEventListener('change', () => {
-            draft.mode = input.value || null;
+            draft.modes = input.checked ? [...draft.modes, input.value] : draft.modes.filter((m) => m !== input.value);
+            if (input.checked && allowed().length === 1) {
+                draft.mode = input.value;
+            }
             saveDraft();
             render();
-            if (viewer && draft.mode === 'orbit') {
-                viewer.state.cameraMode = 'orbit';
-            } else if (viewer && draft.mode === 'walk' && viewer.state.walkAllowed) {
-                viewer.state.cameraMode = 'walk';
-            }
         });
     }
+    $('#start-mode').addEventListener('change', () => {
+        draft.mode = $('#start-mode').value || null;
+        saveDraft();
+        render();
+        const start = startMode();
+        if (viewer && start === 'orbit') {
+            viewer.state.cameraMode = 'orbit';
+        } else if (viewer && start === 'walk' && viewer.state.walkAllowed) {
+            viewer.state.cameraMode = 'walk';
+        }
+    });
+    $('#box-add').addEventListener('click', () => {
+        const p = pose();
+        // around the camera when walking or flying, around the subject when orbiting
+        const centre = p.mode === 'orbit' ? p.focus : p.position;
+        draft.box = { center: centre, size: draft.box?.size ?? [6, 3, 6], yaw: round(p.angles[1], 1) };
+        draft.boxTool ??= 'move';
+        saveDraft();
+        render();
+        setStatus('Box placed. Drag its arrows to move it; switch to Resize or Turn for the other handles.');
+    });
+    $('#box-remove').addEventListener('click', () => {
+        draft.box = null;
+        saveDraft();
+        render();
+    });
+    for (const input of document.querySelectorAll('input[name="box-tool"]')) {
+        input.addEventListener('change', () => {
+            draft.boxTool = input.value;
+            saveDraft();
+            render();
+        });
+    }
+    $('#orbit-point').addEventListener('click', () => {
+        if (!ensureOrbit()) return;
+        draft.orbitTarget = pose().focus;
+        saveDraft();
+        render();
+        setStatus('Orbit point fixed at the current focus. Set the start view from here too.');
+    });
+    $('#clear-orbit-point').addEventListener('click', () => {
+        draft.orbitTarget = null;
+        saveDraft();
+        render();
+    });
 
     for (const button of document.querySelectorAll('[data-mark]')) {
         button.addEventListener('click', () => {
@@ -493,6 +617,7 @@ const wire = () => {
         draft.marks = {};
         draft.pan = 'free';
         draft.panBox = null;
+        draft.orbitTarget = null;
         saveDraft();
         render();
     });
@@ -523,7 +648,7 @@ const wire = () => {
 
     $('#start-view').addEventListener('click', () => {
         // in an orbit scene the start view must circle the subject: take it from orbit mode
-        if (draft.mode === 'orbit' && !ensureOrbit()) return;
+        if (startMode() === 'orbit' && !ensureOrbit()) return;
         const p = pose();
         draft.settings.cameras = [{ initial: { position: p.position, target: p.focus, fov: p.fov } }];
         draft.startYaw = p.angles[1];
@@ -670,6 +795,10 @@ const draftFrom = (limits, settings) => {
     if (orbit?.distance) [marks.near, marks.far] = orbit.distance;
     return {
         mode: limits?.mode ?? null,
+        modes: limits?.modes?.length ? [...limits.modes] : limits?.mode ? [limits.mode] : [...MODES],
+        orbitTarget: orbit?.target ?? null,
+        box: limits?.box ?? null,
+        boxTool: 'move',
         marks,
         pan: orbit?.pan === false ? 'locked' : Array.isArray(orbit?.pan) ? 'box' : 'free',
         panBox: Array.isArray(orbit?.pan) ? orbit.pan : null,
@@ -694,6 +823,10 @@ if (!folder) {
         const saved = storedDraft();
         if (saved && saved.base === siteVersion()) {
             draft = saved;
+            draft.modes ??= draft.mode ? [draft.mode] : [...MODES];
+            draft.orbitTarget ??= null;
+            draft.box ??= null;
+            draft.boxTool ??= 'move';
             setStatus('Continuing your unsaved draft from last time.');
         } else {
             draft = draftFrom(scene.limits, structuredClone(scene.settings));

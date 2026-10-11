@@ -16,10 +16,13 @@
                 overflow: hidden;
                 background: #111;
             }
-            /* A scene locked to one camera mode has no mode switch, and its animation is the
-               Tour pill rather than play, pause and a timeline. */
-            body.gs-locked .sse-buttonGroup:has(.sse-orbitCamera),
-            body.gs-locked .sse-walkShortcut,
+            /* A scene locked to its camera modes shows only their switches (none for one mode),
+               and its animation is the Tour pill rather than play, pause and a timeline. */
+            body.gs-locked:not(.gs-several) .sse-buttonGroup:has(.sse-orbitCamera),
+            body.gs-locked:not(.gs-orbit) .sse-orbitCamera,
+            body.gs-locked:not(.gs-fly) .sse-flyCamera,
+            body.gs-locked:not(.gs-walk) .sse-fpsCamera,
+            body.gs-locked:not(.gs-walk) .sse-walkShortcut,
             body.gs-locked .sse-playShortcut,
             body.gs-locked .sse-buttonGroup:has(.sse-play),
             body.gs-locked .sse-timelineContainer {
@@ -186,11 +189,19 @@
             const pills = document.createElement('div');
             pills.className = 'gs-pills';
 
-            // A scene locked to one mode offers its animation as a tour: off until a visitor
-            // starts it; it ends back in the locked mode (stopping it, touching the view, or the
-            // end of the track). Scenes without a locked mode keep the viewer's own play button.
-            const tourControl = (viewer, lockedMode) => {
-                if (!lockedMode) return;
+            // The camera modes a scene's limits allow, starting mode first; null for all of them.
+            const allowedModes = (limits) => {
+                if (!limits?.mode && !limits?.modes?.length) return null;
+                const modes = limits.modes?.length ? [...limits.modes] : [limits.mode];
+                return limits.mode ? [limits.mode, ...modes.filter((m) => m !== limits.mode)] : modes;
+            };
+
+            // A scene locked to its modes offers its animation as a tour: off until a visitor
+            // starts it; it ends back in the mode they were in (stopping it, touching the view,
+            // or the end of the track). Other scenes keep the viewer's own play button.
+            const tourControl = (viewer, modes) => {
+                if (!modes) return;
+                let before = modes[0];
                 const button = document.createElement('button');
                 button.type = 'button';
                 button.className = 'gs-tour';
@@ -204,9 +215,10 @@
                 };
                 button.addEventListener('click', () => {
                     if (touring()) {
-                        viewer.state.cameraMode = lockedMode;
+                        viewer.state.cameraMode = before;
                         return;
                     }
+                    before = viewer.state.cameraMode;
                     const { animationTime, animationDuration } = viewer.state;
                     if (animationDuration > 0 && animationTime >= animationDuration - 0.05) {
                         viewer.seek(0); // a finished tour starts again from the beginning
@@ -338,7 +350,12 @@
             } else {
                 try {
                     const scene = await loadScene(folder, defaultSettings);
-                    document.body.classList.toggle('gs-locked', Boolean(scene.limits?.mode));
+                    const modes = allowedModes(scene.limits);
+                    document.body.classList.toggle('gs-locked', Boolean(modes));
+                    document.body.classList.toggle('gs-several', (modes?.length ?? 0) > 1);
+                    for (const mode of ['orbit', 'walk', 'fly']) {
+                        document.body.classList.toggle(`gs-${mode}`, Boolean(modes?.includes(mode)));
+                    }
                     window.viewer = await createViewer({
                         container: document.body,
                         settings: scene.settings,
@@ -351,7 +368,7 @@
                         renderer: params.has('webgl') ? 'webgl' : 'webgpu'
                     });
                     document.body.append(pills);
-                    tourControl(window.viewer, scene.limits?.mode);
+                    tourControl(window.viewer, modes);
                     heightControl(window.viewer);
                 } catch (error) {
                     message(`This scene could not be loaded. ${error.message}`);
