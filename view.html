@@ -16,9 +16,13 @@
                 overflow: hidden;
                 background: #111;
             }
-            /* A scene locked to one camera mode has no mode switch. */
+            /* A scene locked to one camera mode has no mode switch, and its animation is the
+               Tour pill rather than play, pause and a timeline. */
             body.gs-locked .sse-buttonGroup:has(.sse-orbitCamera),
-            body.gs-locked .sse-walkShortcut {
+            body.gs-locked .sse-walkShortcut,
+            body.gs-locked .sse-playShortcut,
+            body.gs-locked .sse-buttonGroup:has(.sse-play),
+            body.gs-locked .sse-timelineContainer {
                 display: none !important;
             }
             .gs-back {
@@ -43,13 +47,36 @@
             [hidden] {
                 display: none !important;
             }
-            /* Walk mode: the visitor's height sets their eye level. One pill: closed it shows the
-               height, open it becomes the field, the unit switch, reset and close. */
-            .gs-height {
+            /* Pills at the top right: the tour, and the visitor's height in walk mode. */
+            .gs-pills {
                 position: fixed;
                 top: calc(env(safe-area-inset-top, 0px) + 12px);
                 right: 12px;
                 z-index: 10;
+                display: flex;
+                gap: 8px;
+                align-items: center;
+            }
+            .gs-tour {
+                min-height: 40px;
+                padding: 0 16px;
+                border: 0;
+                border-radius: 999px;
+                background: rgba(18, 18, 20, 0.62);
+                backdrop-filter: blur(6px);
+                color: #f2f2f2;
+                font: 500 13px/1.2 system-ui, sans-serif;
+                cursor: pointer;
+            }
+            .gs-tour:hover,
+            .gs-tour:focus-visible {
+                background: rgba(18, 18, 20, 0.85);
+                outline: 2px solid rgba(255, 255, 255, 0.5);
+                outline-offset: 1px;
+            }
+            /* Walk mode: the visitor's height sets their eye level. One pill: closed it shows the
+               height, open it becomes the field, the unit switch, reset and close. */
+            .gs-height {
                 display: flex;
                 align-items: center;
                 gap: 2px;
@@ -156,6 +183,42 @@
                 }
             };
 
+            const pills = document.createElement('div');
+            pills.className = 'gs-pills';
+
+            // A scene locked to one mode offers its animation as a tour: off until a visitor
+            // starts it; it ends back in the locked mode (stopping it, touching the view, or the
+            // end of the track). Scenes without a locked mode keep the viewer's own play button.
+            const tourControl = (viewer, lockedMode) => {
+                if (!lockedMode) return;
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'gs-tour';
+                pills.append(button);
+                const touring = () => viewer.state.cameraMode === 'anim';
+                const update = () => {
+                    button.hidden = !viewer.state.hasAnimation;
+                    button.textContent = touring() ? '■ Stop tour' : '▶ Tour';
+                    button.setAttribute('aria-pressed', String(touring()));
+                    button.title = touring() ? 'Stop the tour' : 'Play a short tour of the scene';
+                };
+                button.addEventListener('click', () => {
+                    if (touring()) {
+                        viewer.state.cameraMode = lockedMode;
+                        return;
+                    }
+                    const { animationTime, animationDuration } = viewer.state;
+                    if (animationDuration > 0 && animationTime >= animationDuration - 0.05) {
+                        viewer.seek(0); // a finished tour starts again from the beginning
+                    }
+                    viewer.state.cameraMode = 'anim';
+                    viewer.state.animationPaused = false;
+                });
+                viewer.events.on('cameraMode:changed', update);
+                viewer.events.on('hasAnimation:changed', update);
+                update();
+            };
+
             // In walk mode visitors can give their height, so they see the scene from their own
             // eye level. Kept in this browser, in metres; shown in cm or feet and inches.
             const heightControl = (viewer) => {
@@ -174,7 +237,7 @@
                         <button type="button" class="icon reset" title="Default height" aria-label="Default height">↺</button>
                         <button type="button" class="icon close" title="Close" aria-label="Close">✕</button>
                     </div>`;
-                document.body.append(box);
+                pills.append(box);
                 const toggle = box.querySelector('.toggle');
                 const edit = box.querySelector('.edit');
                 const unitSwitch = box.querySelector('.switch');
@@ -283,9 +346,12 @@
                         collisionUrl: scene.collisionUrl,
                         skyboxUrl: scene.skyboxUrl,
                         posterUrl: scene.posterUrl,
-                        limits: scene.limits,
+                        // always an object: annotation limits apply only when the viewer has one
+                        limits: scene.limits ?? {},
                         renderer: params.has('webgl') ? 'webgl' : 'webgpu'
                     });
+                    document.body.append(pills);
+                    tourControl(window.viewer, scene.limits?.mode);
                     heightControl(window.viewer);
                 } catch (error) {
                     message(`This scene could not be loaded. ${error.message}`);

@@ -89887,98 +89887,6 @@ class FlySource {
     }
 }
 
-const p = new Pose();
-class OrbitController {
-    controller;
-    fov = 90;
-    _limits;
-    // Kept here because the engine's zoomRange getter reports the focus point's z range.
-    _zoom;
-    constructor(limits) {
-        this._limits = limits;
-        this._zoom = new Vec2(limits?.distance?.[0] ?? 0.01, limits?.distance?.[1] ?? Infinity);
-        this.controller = new OrbitController$1();
-        this.controller.zoomRange = this._zoom.clone();
-        this.controller.pitchRange = new Vec2(limits?.pitch?.[0] ?? -90, limits?.pitch?.[1] ?? 90);
-        if (limits?.yaw) {
-            this.controller.yawRange = new Vec2(limits.yaw[0], limits.yaw[1]);
-        }
-        if (Array.isArray(limits?.pan)) {
-            const [x0, y0, z0, x1, y1, z1] = limits.pan;
-            const root = this._root();
-            root.xRange.set(x0, x1);
-            root.yRange.set(y0, y1);
-            root.zRange.set(z0, z1);
-        }
-        this.controller.rotateDamping = DEFAULT_CONTROLLER_DAMPING;
-        this.controller.moveDamping = DEFAULT_CONTROLLER_DAMPING;
-        this.controller.zoomDamping = DEFAULT_CONTROLLER_DAMPING;
-    }
-    onEnter(camera) {
-        this._attach(camera);
-    }
-    update(deltaTime, inputFrame, camera) {
-        if (this._limits?.pan === false) {
-            // drop the sideways and up/down part of the move input; zoom (index 2) stays
-            const move = inputFrame.deltas.move._value;
-            move[0] = 0;
-            move[1] = 0;
-        }
-        const pose = this.controller.update(inputFrame, deltaTime);
-        camera.position.copy(pose.position);
-        camera.angles.copy(pose.angles);
-        camera.distance = pose.distance;
-        camera.fov = this.fov;
-    }
-    onExit(_camera) {
-        // no cleanup needed
-    }
-    goto(camera) {
-        this.fov = camera.fov;
-        this._attach(camera);
-    }
-    _root() {
-        return this.controller._targetRootPose;
-    }
-    _attach(camera) {
-        p.position.copy(camera.position);
-        p.angles.copy(camera.angles);
-        const yaw = this._limits?.yaw;
-        if (yaw) {
-            // Angles arrive in -180..180; the limit may sit across that seam. Take the turn
-            // of the same direction nearest the middle of the allowed range.
-            const mid = (yaw[0] + yaw[1]) / 2;
-            p.angles.y = mid + ((((p.angles.y - mid + 180) % 360) + 360) % 360) - 180;
-        }
-        p.distance = Math.min(Math.max(camera.distance, this._zoom.x), this._zoom.y);
-        this.controller.attach(p, false);
-        // attach places the pose without the ranges; a zero turn and move apply them now
-        const root = this._root();
-        root.rotate(new Vec3());
-        root.move(new Vec3());
-        this.controller._rootPose.copy(root);
-    }
-}
-
-const FIXED_DT = 1 / 60;
-const MAX_SUBSTEPS = 10;
-/** Pre-allocated push-out vector for capsule collision */
-const out = { x: 0, y: 0, z: 0 };
-const v = new Vec3();
-const d = new Vec3();
-const forward = new Vec3();
-const right$1 = new Vec3();
-const moveStep = [0, 0, 0];
-const offset = new Vec3();
-const spawnProbe = new Vec3();
-/**
- * First-person camera controller with spring-damper suspension over collision terrain.
- *
- * Movement is constrained to the horizontal plane (XZ) relative to the camera yaw.
- * Vertical positioning uses a spring-damper system that hovers the capsule above the
- * collision surface, filtering out terrain noise for smooth camera motion. Capsule
- * collision handles walls and obstacles. When airborne, normal gravity applies.
- */
 // Gaussian Studio: keep a point inside a ground fence (x, z polygon). Inside: unchanged.
 // Outside: moved to the nearest point on the fence. Returns true if it moved the point.
 const fencePoint = (fence, pos) => {
@@ -90052,6 +89960,188 @@ const wallStep = (walls, from, to, radius, velocity) => {
     }
     return pushed;
 };
+
+const p = new Pose();
+const zero = new Vec3();
+// How close the camera may come to collision while panning or zooming.
+const CLEARANCE = 0.15;
+const turn = new Quat();
+const camFrom = new Vec3();
+const camTo = new Vec3();
+const probe = new Vec3();
+const noVelocity = new Vec3();
+const push = { x: 0, y: 0, z: 0 };
+const prevRoot = new Vec3();
+class OrbitController {
+    controller;
+    fov = 90;
+    _limits;
+    // Kept here because the engine's zoomRange getter reports the focus point's z range.
+    _zoom;
+    /** Gaussian Studio: set for visitors; pan and zoom stop at these. */
+    barriers = null;
+    collision = null;
+    constructor(limits) {
+        this._zoom = new Vec2();
+        this.controller = new OrbitController$1();
+        this.setLimits(limits);
+        this.controller.rotateDamping = DEFAULT_CONTROLLER_DAMPING;
+        this.controller.moveDamping = DEFAULT_CONTROLLER_DAMPING;
+        this.controller.zoomDamping = DEFAULT_CONTROLLER_DAMPING;
+    }
+    onEnter(camera) {
+        this._attach(camera);
+    }
+    update(deltaTime, inputFrame, camera) {
+        if (this._limits?.pan === false) {
+            // drop the sideways and up/down part of the move input; zoom (index 2) stays
+            const move = inputFrame.deltas.move._value;
+            move[0] = 0;
+            move[1] = 0;
+        }
+        const root = this._root();
+        const child = this._child();
+        prevRoot.copy(root.position);
+        const prevZoom = child.position.z;
+        const pose = this.controller.update(inputFrame, deltaTime);
+        if (this.barriers) {
+            this._holdAtBarriers(prevRoot, prevZoom);
+        }
+        camera.position.copy(pose.position);
+        camera.angles.copy(pose.angles);
+        camera.distance = pose.distance;
+        camera.fov = this.fov;
+    }
+    onExit(_camera) {
+        // no cleanup needed
+    }
+    goto(camera) {
+        this.fov = camera.fov;
+        this._attach(camera);
+    }
+    /**
+     * Gaussian Studio: swap the limits while running (an annotation's own, then the scene's
+     * again). Only the targets are clamped, so the view eases into the new ranges.
+     */
+    setLimits(limits) {
+        this._limits = limits;
+        this._zoom.set(limits?.distance?.[0] ?? 0.01, limits?.distance?.[1] ?? Infinity);
+        const root = this._root();
+        root.pitchRange.set(limits?.pitch?.[0] ?? -90, limits?.pitch?.[1] ?? 90);
+        root.yawRange.set(limits?.yaw?.[0] ?? -Infinity, limits?.yaw?.[1] ?? Infinity);
+        const box = Array.isArray(limits?.pan) ? limits.pan : null;
+        root.xRange.set(box?.[0] ?? -Infinity, box?.[3] ?? Infinity);
+        root.yRange.set(box?.[1] ?? -Infinity, box?.[4] ?? Infinity);
+        root.zRange.set(box?.[2] ?? -Infinity, box?.[5] ?? Infinity);
+        const child = this._child();
+        child.zRange.copy(this._zoom);
+        root.rotate(zero);
+        root.move(zero);
+        child.move(zero);
+    }
+    /**
+     * Undo this frame's pan or zoom (on the targets, which the view eases toward) if it would
+     * carry the camera into something. Turning is never held. Pan is kept if dropping the zoom
+     * alone is enough, and the other way round.
+     */
+    _holdAtBarriers(prevFocus, prevZoom) {
+        const root = this._root();
+        const child = this._child();
+        const focus = root.position;
+        const zoom = child.position.z;
+        if (focus.equals(prevFocus) && zoom === prevZoom) {
+            return;
+        }
+        turn.setFromEulerAngles(root.angles);
+        const at = (f, z, out) => turn.transformVector(out.set(0, 0, z), out).add(f);
+        at(prevFocus, prevZoom, camFrom);
+        if (!this._blocked(camFrom, at(focus, zoom, camTo))) {
+            return;
+        }
+        if (!this._blocked(camFrom, at(focus, prevZoom, camTo))) {
+            child.position.z = prevZoom; // keep the pan
+        }
+        else if (!this._blocked(camFrom, at(prevFocus, zoom, camTo))) {
+            focus.copy(prevFocus); // keep the zoom
+        }
+        else {
+            focus.copy(prevFocus);
+            child.position.z = prevZoom;
+        }
+    }
+    _blocked(from, to) {
+        const { bounds, walls, fence } = this.barriers;
+        // the splat's bounds hold a camera that is inside them (an orbit scene that circles
+        // the subject from outside is not pulled in)
+        if (bounds.containsPoint(from) && !bounds.containsPoint(to)) {
+            return true;
+        }
+        if (fence && !fencePoint(fence, probe.copy(from)) && fencePoint(fence, probe.copy(to))) {
+            return true;
+        }
+        if (walls?.length && wallStep(walls, from, probe.copy(to), 0.1, noVelocity.set(0, 0, 0))) {
+            return true;
+        }
+        const collision = this.collision;
+        if (collision) {
+            const dx = to.x - from.x;
+            const dy = to.y - from.y;
+            const dz = to.z - from.z;
+            const length = Math.hypot(dx, dy, dz);
+            // a camera already inside something may always move (out of it)
+            if (length > 1e-6 && !collision.querySphere(from.x, from.y, from.z, 0.02, push)) {
+                if (collision.queryRay(from.x, from.y, from.z, dx / length, dy / length, dz / length, length + CLEARANCE)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    _root() {
+        return this.controller._targetRootPose;
+    }
+    _child() {
+        return this.controller._targetChildPose;
+    }
+    _attach(camera) {
+        p.position.copy(camera.position);
+        p.angles.copy(camera.angles);
+        const yaw = this._limits?.yaw;
+        if (yaw) {
+            // Angles arrive in -180..180; the limit may sit across that seam. Take the turn
+            // of the same direction nearest the middle of the allowed range.
+            const mid = (yaw[0] + yaw[1]) / 2;
+            p.angles.y = mid + ((((p.angles.y - mid + 180) % 360) + 360) % 360) - 180;
+        }
+        p.distance = Math.min(Math.max(camera.distance, this._zoom.x), this._zoom.y);
+        this.controller.attach(p, false);
+        // attach places the pose without the ranges; a zero turn and move apply them now
+        const root = this._root();
+        root.rotate(zero);
+        root.move(zero);
+        this.controller._rootPose.copy(root);
+    }
+}
+
+const FIXED_DT = 1 / 60;
+const MAX_SUBSTEPS = 10;
+/** Pre-allocated push-out vector for capsule collision */
+const out = { x: 0, y: 0, z: 0 };
+const v = new Vec3();
+const d = new Vec3();
+const forward = new Vec3();
+const right$1 = new Vec3();
+const moveStep = [0, 0, 0];
+const offset = new Vec3();
+const spawnProbe = new Vec3();
+/**
+ * First-person camera controller with spring-damper suspension over collision terrain.
+ *
+ * Movement is constrained to the horizontal plane (XZ) relative to the camera yaw.
+ * Vertical positioning uses a spring-damper system that hovers the capsule above the
+ * collision surface, filtering out terrain noise for smooth camera motion. Capsule
+ * collision handles walls and obstacles. When airborne, normal gravity applies.
+ */
 const stepStart = new Vec3();
 /** Gaussian Studio: eyes sit about this far below the top of the head, in meters. */
 const EYE_BELOW_TOP_OF_HEAD = 0.11;
@@ -90672,23 +90762,37 @@ class CameraManager {
         // object experience starts outside the bounding box
         const isObjectExperience = !bbox.containsPoint(resetCamera.position);
         const animTrack = getAnimTrack(resetCamera, isObjectExperience);
-        // Gaussian Studio: scenes with limits skip the automatic intro animation, which would
-        // ignore them, and start in their locked mode.
+        // Gaussian Studio: a scene with a locked mode starts in it rather than in the intro
+        // animation, which ignores the limits. The animation stays as a tour visitors start
+        // themselves; it ends back in the locked mode.
         const limits = global.config.limits;
         const controllers = {
             orbit: new OrbitController(limits?.orbit),
             fly: new FlyController(),
             walk: new WalkController(),
-            anim: animTrack && !limits?.mode ? new AnimController(animTrack) : null
+            anim: animTrack ? new AnimController(animTrack) : null
+        };
+        const endTour = () => {
+            state.cameraMode = limits.mode;
         };
         controllers.walk.fence = limits?.walk?.fence ?? null;
         controllers.walk.walls = limits?.walk?.walls?.filter((w) => w.length >= 4) ?? null;
+        // visitors cannot pan or zoom the orbit camera through the scene, its walls and fence,
+        // or out of the splat (the editor passes no limits, so it moves freely)
+        if (limits) {
+            controllers.orbit.barriers = {
+                bounds: bbox,
+                walls: controllers.walk.walls,
+                fence: controllers.walk.fence
+            };
+        }
         controllers.walk.setBodyHeight(global.visitorHeight ?? null);
         events.on('visitorHeight:changed', (height) => controllers.walk.setBodyHeight(height));
         controllers.orbit.fov = resetCamera.fov;
         controllers.fly.fov = resetCamera.fov;
         controllers.fly.collision = collision;
         controllers.walk.collision = collision;
+        controllers.orbit.collision = collision;
         const walkSource = new WalkSource();
         const flySource = new FlySource();
         const sourcesByMode = {
@@ -90705,7 +90809,8 @@ class CameraManager {
         state.hasAnimation = !!controllers.anim;
         state.animationDuration = controllers.anim ? controllers.anim.animState.cursor.duration : 0;
         // initialize camera mode and initial camera position
-        state.cameraMode = state.hasAnimation ? 'anim' : isObjectExperience ? 'orbit' : walkAllowed ? 'walk' : 'fly';
+        state.cameraMode =
+            state.hasAnimation && !limits?.mode ? 'anim' : isObjectExperience ? 'orbit' : walkAllowed ? 'walk' : 'fly';
         this.camera.copy(resetCamera);
         const target = new Camera(this.camera); // the active controller updates this
         const from = new Camera(this.camera); // stores the previous camera state during transition
@@ -90741,6 +90846,7 @@ class CameraManager {
         this.setCollision = (value) => {
             controllers.fly.collision = value;
             controllers.walk.collision = value;
+            controllers.orbit.collision = value;
             walkAllowed = isWalkAllowed(bbox, value);
         };
         this.snap = () => {
@@ -90782,6 +90888,9 @@ class CameraManager {
                 // a play-once animation pauses once it reaches the end of the track
                 if (!state.animationPaused && controllers.anim.animState.cursor.ended) {
                     state.animationPaused = true;
+                    if (limits?.mode) {
+                        endTour();
+                    }
                 }
             }
             if (clearOrbitTargetOnTransitionEnd && prevTransitionTimer < 1 && transitionTimer === 1) {
@@ -90819,7 +90928,11 @@ class CameraManager {
                     break;
                 case 'playPause':
                     if (state.hasAnimation) {
-                        if (state.cameraMode === 'anim') {
+                        if (state.cameraMode === 'anim' && limits?.mode) {
+                            // a tour is on or off; pausing would leave visitors stuck in it
+                            endTour();
+                        }
+                        else if (state.cameraMode === 'anim') {
                             state.animationPaused = !state.animationPaused;
                         }
                         else {
@@ -90896,8 +91009,44 @@ class CameraManager {
             controllers.anim.animState.cursor.value = time;
             state.animationTime = controllers.anim.animState.cursor.value;
         };
+        // Gaussian Studio: an annotation may limit the zoom around it (its `extras.limits`).
+        // They apply while it is the orbit's subject, on top of the scene's orbit limits, and
+        // only for visitors (the editor passes no limits). Panning is held by the barriers.
+        let annotationLimited = false;
+        const sceneOrbitLimits = () => {
+            if (annotationLimited) {
+                annotationLimited = false;
+                controllers.orbit.setLimits(limits?.orbit);
+            }
+        };
+        const annotationOrbitLimits = (annotation) => {
+            const own = annotation.extras?.limits;
+            if (!limits || !own || (own.closest === undefined && own.furthest === undefined)) {
+                sceneOrbitLimits();
+                return;
+            }
+            controllers.orbit.setLimits({
+                ...limits.orbit,
+                distance: [
+                    own.closest ?? limits.orbit?.distance?.[0] ?? 0.01,
+                    own.furthest ?? limits.orbit?.distance?.[1] ?? Infinity
+                ]
+            });
+            annotationLimited = true;
+        };
+        events.on('selectedAnnotation:changed', (index) => {
+            if (index === null) {
+                sceneOrbitLimits();
+            }
+        });
+        events.on('cameraMode:changed', (mode) => {
+            if (mode !== 'orbit') {
+                sceneOrbitLimits();
+            }
+        });
         // handle user picking in the scene
         events.on('pick', (position) => {
+            sceneOrbitLimits();
             // switch to orbit camera on pick
             state.cameraMode = 'orbit';
             // construct camera
@@ -90912,6 +91061,7 @@ class CameraManager {
             // switch to orbit camera on pick
             state.cameraMode = 'orbit';
             const { initial } = annotation.camera;
+            annotationOrbitLimits(annotation);
             // construct camera
             tmpCamera.fov = initial.fov;
             tmpCamera.look(new Vec3(initial.position), new Vec3(initial.target));
@@ -102392,6 +102542,7 @@ const createViewer = async (options) => {
     // Gaussian Studio: a scene with a locked mode never leaves it. Walk falls back to fly
     // only until the collision data that walk needs has arrived. Picking an annotation
     // orbits it as in the stock viewer; dropping the annotation returns to the locked mode.
+    // The animation runs as a tour that visitors start; it ends in the locked mode.
     const lockedMode = config.limits?.mode;
     let annotationOrbit = false;
     const modeGuard = lockedMode
@@ -102402,7 +102553,7 @@ const createViewer = async (options) => {
                 }
                 return value;
             }
-            if (value === 'orbit' && annotationOrbit) {
+            if ((value === 'orbit' && annotationOrbit) || (value === 'anim' && target.hasAnimation)) {
                 return value;
             }
             return lockedMode === 'walk' && !target.walkAllowed ? 'fly' : lockedMode;

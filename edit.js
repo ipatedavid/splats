@@ -304,7 +304,7 @@ const render = () => {
             await startViewer();
         });
         row.append(title, go, remove);
-        item.append(row);
+        item.append(row, annotationLimitsControls(annotation, index));
         const warning = annotationWarning(annotation, limits);
         if (warning) {
             const note = document.createElement('p');
@@ -330,9 +330,87 @@ const render = () => {
     $('#preview').textContent = previewing ? 'Back to editing' : 'Try as a visitor';
 };
 
-// An annotation whose view sits outside the orbit limits snaps back when visitors open it.
+// ---- an annotation's own limits -----------------------------------------------------------
+
+// How close and how far visitors may zoom while orbiting an annotation. Kept in the
+// annotation's extras.limits and recorded from the view, like the orbit limits. (Panning needs
+// no limit: visitors' cameras stop at the collision, walls and fence, and stay in the splat.)
+const setAnnotationLimits = (index, change) => {
+    const annotation = draft.settings.annotations[index];
+    const own = { ...(annotation.extras?.limits ?? {}), ...change };
+    for (const key of Object.keys(own)) {
+        if (own[key] === undefined) delete own[key];
+    }
+    if (own.closest !== undefined && own.furthest !== undefined && own.closest > own.furthest) {
+        [own.closest, own.furthest] = [own.furthest, own.closest];
+    }
+    annotation.extras = { ...(annotation.extras ?? {}) };
+    if (Object.keys(own).length) {
+        annotation.extras.limits = own;
+    } else {
+        delete annotation.extras.limits;
+    }
+    saveDraft();
+    render();
+};
+
+const recordAnnotationZoom = (index, end) => {
+    if (viewer?.state.selectedAnnotation !== index || viewer.state.cameraMode !== 'orbit') {
+        setStatus('Press Show on this annotation first, zoom to the edge, then press the button again.');
+        return;
+    }
+    const distance = round(pose().distance, 3);
+    setAnnotationLimits(index, { [end]: distance });
+    setStatus(`${end === 'closest' ? 'Closest' : 'Furthest'} zoom for this annotation: ${round(distance, 2)} m.`);
+};
+
+const describeZoom = (own) => {
+    if (own.closest !== undefined && own.furthest !== undefined) return `zoom ${round(own.closest, 2)} m to ${round(own.furthest, 2)} m`;
+    if (own.furthest !== undefined) return `zoom out to ${round(own.furthest, 2)} m`;
+    if (own.closest !== undefined) return `zoom in to ${round(own.closest, 2)} m`;
+    return 'zoom not limited';
+};
+
+const annotationLimitsControls = (annotation, index) => {
+    const own = annotation.extras?.limits ?? {};
+    const box = document.createElement('div');
+    box.className = 'ann-limits';
+
+    const zoom = document.createElement('div');
+    zoom.className = 'row';
+    for (const [end, text] of [['closest', 'Closest here'], ['furthest', 'Furthest here']]) {
+        const button = document.createElement('button');
+        button.textContent = text;
+        button.classList.toggle('active', own[end] !== undefined);
+        button.addEventListener('click', () => recordAnnotationZoom(index, end));
+        zoom.append(button);
+    }
+
+    const summary = document.createElement('div');
+    summary.className = 'row';
+    const out = document.createElement('output');
+    out.textContent = describeZoom(own);
+    summary.append(out);
+    if (Object.keys(own).length) {
+        const clear = document.createElement('button');
+        clear.className = 'quiet';
+        clear.textContent = 'Clear';
+        clear.addEventListener('click', () =>
+            setAnnotationLimits(index, { closest: undefined, furthest: undefined }));
+        summary.append(clear);
+    }
+    box.append(zoom, summary);
+    return box;
+};
+
+// An annotation whose view sits outside the orbit limits (its own, or the scene's) snaps back
+// when visitors open it.
 const annotationWarning = (annotation, limits) => {
     const view = annotation.extras?.view;
+    const own = annotation.extras?.limits ?? {};
+    if (view && (view.distance < (own.closest ?? 0) * 0.98 || view.distance > (own.furthest ?? Infinity) * 1.02)) {
+        return 'Its view is outside its own zoom limits; re-save it, or record the limits again.';
+    }
     const orbit = limits.orbit;
     if (!view || limits.mode !== 'orbit' || !orbit) {
         return '';
@@ -345,7 +423,8 @@ const annotationWarning = (annotation, limits) => {
     if (orbit.pitch && (view.pitch < orbit.pitch[0] - 0.5 || view.pitch > orbit.pitch[1] + 0.5)) {
         outside.push('tilt');
     }
-    if (orbit.distance && (view.distance < orbit.distance[0] * 0.98 || view.distance > orbit.distance[1] * 1.02)) {
+    const ownZoom = own.closest !== undefined || own.furthest !== undefined;
+    if (!ownZoom && orbit.distance && (view.distance < orbit.distance[0] * 0.98 || view.distance > orbit.distance[1] * 1.02)) {
         outside.push('zoom');
     }
     return outside.length ? `Its view is outside the ${outside.join(' and ')} limits; re-save it from inside them.` : '';

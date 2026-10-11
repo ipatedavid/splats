@@ -200,3 +200,15 @@ body.gs-locked .sse-walkShortcut {
         border-top: 1px solid var(--line);
     }
 }
+/* an annotation's own limits, under its title */
+.ann-limits {
+    display: grid;
+    gap: 4px;
+    margin: 4px 0 6px;
+}
+.ann-limits button {
+    font-size: 0.82rem;
+}
+#annotations li .ann-limits .row {
+    justify-content: flex-start;
+}
