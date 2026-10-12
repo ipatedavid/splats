@@ -143,6 +143,9 @@ const buildLimits = () => {
         if (draft.holdOrbit && (walk.walls || walk.fence)) {
             walk.holdOrbit = true;
         }
+        if (draft.floor !== null && modes.includes('walk')) {
+            walk.floor = round(draft.floor, 3);
+        }
         if (Object.keys(walk).length) {
             limits.walk = walk;
         }
@@ -181,6 +184,7 @@ const restartViewer = async () => {
     });
     window.viewer = viewer;
     drawWalls();
+    viewer.setFloor?.(draft.modes.includes('walk') ? draft.floor : null);
     // the collision view: the viewer offers it once the collision data is in (and on WebGPU)
     const showCollision = () => {
         const available = Boolean(viewer?.state.hasCollisionOverlay);
@@ -344,6 +348,11 @@ const render = () => {
     $('#nudge-hint').hidden = !draft.orbitTarget || !(draft.orbitNudge > 0);
     $('#orbit-nudge').value = String(draft.orbitNudge ?? 0);
     $('#stop-walls').checked = draft.collision.orbit;
+    $('#floor-tools').hidden = !modes.includes('walk');
+    $('#flat-floor').checked = draft.floor !== null;
+    $('#floor-height-tools').hidden = draft.floor === null;
+    if (document.activeElement !== $('#floor-height')) $('#floor-height').value = String(draft.floor ?? draft.floorHeight ?? 0);
+    viewer?.setFloor?.(modes.includes('walk') ? draft.floor : null);
     $('#stay-in').checked = draft.edge !== 'off';
     for (const input of document.querySelectorAll('input[name="edge"]')) {
         input.checked = input.value === (draft.edge === 'off' ? draft.edgeTightness : draft.edge);
@@ -743,6 +752,18 @@ const wire = () => {
         document.body.classList.add('placing');
         setStatus('Click the spot on the splat for the annotation.');
     });
+    $('#flat-floor').addEventListener('change', () => {
+        draft.floor = $('#flat-floor').checked ? (draft.floorHeight ?? 0) : null;
+        saveDraft();
+        render();
+    });
+    $('#floor-height').addEventListener('change', () => {
+        const value = Number($('#floor-height').value);
+        draft.floorHeight = Number.isFinite(value) ? round(value, 3) : 0;
+        if (draft.floor !== null) draft.floor = draft.floorHeight;
+        saveDraft();
+        render();
+    });
     // While placing, the whole click belongs to the editor: none of it may reach the viewer.
     let swallowUntilUp = false;
     for (const type of ['pointerup', 'mouseup', 'click', 'mousedown']) {
@@ -874,6 +895,8 @@ const draftFrom = (limits, settings) => {
         orbitTarget: orbit?.target ?? null,
         collision: { orbit: limits?.collision?.orbit ?? true, fly: limits?.collision?.fly ?? true },
         orbitNudge: orbit?.targetPan ?? 0,
+        floor: limits?.walk?.floor ?? null,
+        floorHeight: limits?.walk?.floor ?? 0,
         holdOrbit: Boolean(limits?.walk?.holdOrbit),
         edge: limits?.edge ?? 'normal',
         edgeTightness: !limits?.edge || limits.edge === 'off' ? 'normal' : limits.edge,
@@ -906,6 +929,8 @@ if (!folder) {
             draft.edge ??= 'normal';
             draft.edgeTightness ??= draft.edge === 'off' ? 'normal' : draft.edge;
             draft.orbitNudge ??= 0;
+            draft.floor ??= null;
+            draft.floorHeight ??= draft.floor ?? 0;
             draft.collision ??= { orbit: true, fly: true };
             draft.holdOrbit ??= false;
             setStatus('Continuing your unsaved draft from last time.');

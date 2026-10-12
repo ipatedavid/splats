@@ -90844,6 +90844,8 @@ const spawnProbe = new Vec3();
  * collision handles walls and obstacles. When airborne, normal gravity applies.
  */
 const stepStart = new Vec3();
+// Gaussian Studio: with a flat floor, collision below this height above it is ignored
+const FLOOR_CLEARANCE = 0.3;
 const home = new Vec3();
 /** Gaussian Studio: eyes sit about this far below the top of the head, in meters. */
 const EYE_BELOW_TOP_OF_HEAD = 0.11;
@@ -90852,6 +90854,12 @@ class WalkController {
      * Gaussian Studio: ground outline visitors cannot leave, [x, z] corners in order.
      */
     fence = null;
+    /**
+     * Gaussian Studio: a flat floor at this height (world y), for scenes whose floor collision
+     * is broken (reflective floors): walking stands on it instead of on the collision's ground,
+     * and the collision only counts from FLOOR_CLEARANCE above it, for walls and furniture.
+     */
+    floorY = null;
     /** Gaussian Studio: the scene's soft edge (on the ground: height is free). */
     edge = null;
     /**
@@ -91244,6 +91252,9 @@ class WalkController {
         // camera entered at. Without this the camera reads as airborne and falls.
         if (this._heldFloorY !== null)
             return this._heldFloorY;
+        // Gaussian Studio: a set flat floor replaces the collision's ground
+        if (this.floorY !== null)
+            return this.floorY;
         if (!this.collision)
             return null;
         const oy = pos.y - this.eyeHeight;
@@ -91280,8 +91291,16 @@ class WalkController {
     _checkCollision(pos, disp) {
         if (!this.collision)
             return;
-        const center = pos.y - this.eyeHeight + this.capsuleHeight * 0.5;
-        const half = this.capsuleHeight * 0.5 - this.capsuleRadius;
+        let bottom = pos.y - this.eyeHeight;
+        let height = this.capsuleHeight;
+        if (this.floorY !== null) {
+            // with a flat floor, ignore whatever the collision has near the floor (reflections)
+            const lift = Math.max(0, this.floorY + FLOOR_CLEARANCE - bottom);
+            bottom += lift;
+            height = Math.max(this.capsuleRadius * 2 + 0.05, height - lift);
+        }
+        const center = bottom + height * 0.5;
+        const half = height * 0.5 - this.capsuleRadius;
         if (this.collision.queryCapsule(pos.x, center, pos.z, half, this.capsuleRadius, out)) {
             disp.set(out.x, out.y, out.z);
             pos.add(disp);
@@ -91514,6 +91533,11 @@ class CameraManager {
             state.cameraMode = fromMode && fromMode !== 'anim' ? fromMode : locked[0];
         };
         controllers.walk.fence = limits?.walk?.fence ?? null;
+        controllers.walk.floorY = limits?.walk?.floor ?? null;
+        // the editor sets the flat floor live (it passes no limits while editing)
+        events.on('walkFloor:changed', (y) => {
+            controllers.walk.floorY = y;
+        });
         controllers.walk.walls = limits?.walk?.walls?.filter((w) => w.length >= 4) ?? null;
         // For visitors (the editor passes no limits, so it moves freely): the soft box holds
         // every mode. The orbit camera bumps into the scene, the walls and the fence only when
@@ -103534,6 +103558,9 @@ const createViewer = async (options) => {
         showEdge: (box) => {
             boxOverlay ??= new BoxOverlay(app, camera);
             boxOverlay.set(box);
+        },
+        setFloor: (y) => {
+            events.fire('walkFloor:changed', y);
         },
         pick: async (x, y) => {
             const hit = await viewer.picker?.pick(x, y);
