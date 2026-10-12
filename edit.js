@@ -202,8 +202,12 @@ const pose = () => viewer?.cameraPose();
 const currentEdge = () => (draft.edge === 'off' ? null : (viewer?.sceneEdge?.(draft.edge) ?? null));
 const describeEdge = () => {
     if (draft.edge === 'off') return 'Off: nothing holds visitors at the edge of the splat.';
-    const box = currentEdge();
-    return box ? `${box.size.map((v) => round(v, 1)).join(' × ')} m around the dense part` : 'Found once the splat has loaded.';
+    const edge = currentEdge();
+    if (!edge) return 'Found once the splat has loaded.';
+    const xs = edge.segments.flatMap(([x1, , x2]) => [x1, x2]);
+    const zs = edge.segments.flatMap(([, z1, , z2]) => [z1, z2]);
+    const span = (v) => round(Math.max(...v) - Math.min(...v), 1);
+    return `Follows the captured space: about ${span(xs)} × ${span(zs)} m across, ${round(edge.top - edge.bottom, 1)} m high`;
 };
 let edgeTimer = 0;
 const previewEdge = () => {
@@ -505,15 +509,8 @@ const annotationWarning = (annotation, limits) => {
     // the flight to an annotation's view is not held by the edge: keep the view inside it
     const from = annotation.camera?.initial?.position;
     const edge = currentEdge();
-    if (from && edge) {
-        const { center, size, yaw = 0 } = edge;
-        const t = (yaw * Math.PI) / 180;
-        const dx = from[0] - center[0];
-        const dz = from[2] - center[2];
-        const local = [dx * Math.cos(t) - dz * Math.sin(t), from[1] - center[1], dx * Math.sin(t) + dz * Math.cos(t)];
-        if (local.some((v, i) => Math.abs(v) > size[i] / 2)) {
-            return 'Its view is outside the scene edge; re-save it from inside, or loosen the edge.';
-        }
+    if (from && edge && edge.outside(from) > 0.01) {
+        return 'Its view is outside the scene edge; re-save it from inside, or loosen the edge.';
     }
     if (view && (view.distance < (own.closest ?? 0) * 0.98 || view.distance > (own.furthest ?? Infinity) * 1.02)) {
         return 'Its view is outside its own zoom limits; re-save it, or record the limits again.';

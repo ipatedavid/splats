@@ -86765,16 +86765,6 @@ class WallOverlay {
     }
 }
 
-const EDGE = 0.008;
-// The twelve edges, as the axis each runs along and its offset (in half-sizes) on the others.
-const EDGES = [];
-for (const axis of [0, 1, 2]) {
-    for (const a of [-1, 1]) {
-        for (const b of [-1, 1]) {
-            EDGES.push([axis, a, b]);
-        }
-    }
-}
 const seeThrough = (color, opacity) => {
     const material = new StandardMaterial();
     material.useLighting = false;
@@ -86785,7 +86775,7 @@ const seeThrough = (color, opacity) => {
     material.emissive = color;
     material.opacity = opacity;
     material.blendType = BLEND_NORMAL;
-    // drawn over the splat, like the walls, so the box shows where it is behind things
+    // drawn over the splat, like the walls, so the edge shows where it is behind things
     material.depthTest = false;
     material.depthWrite = false;
     material.cull = CULLFACE_NONE;
@@ -86793,18 +86783,19 @@ const seeThrough = (color, opacity) => {
     return material;
 };
 /**
- * Gaussian Studio: the editor's preview of the scene's edge, a see-through cyan box with bright
- * edges drawn over the splat. Never used for visitors.
+ * Gaussian Studio: the editor's preview of the scene's edge, as see-through cyan walls along
+ * its outline from its floor to its ceiling, with bright lines at both. Never used for visitors.
  */
 class BoxOverlay {
     app;
     layer;
-    box;
-    edges;
+    root;
+    wall;
+    line;
     constructor(app, camera) {
         this.app = app;
         this.layer = new Layer({
-            name: 'BoxOverlay',
+            name: 'EdgeOverlay',
             clearColorBuffer: false,
             clearDepthBuffer: false,
             opaqueSortMode: SORTMODE_MANUAL,
@@ -86813,52 +86804,41 @@ class BoxOverlay {
         app.scene.layers.push(this.layer);
         camera.camera.layers = [...camera.camera.layers, this.layer.id];
         const cyan = new Color(0.2, 0.85, 1);
-        this.box = new Entity('SceneEdge', app);
-        this.box.addComponent('render', { type: 'box', material: seeThrough(cyan, 0.08), layers: [this.layer.id] });
-        this.box.enabled = false;
-        app.root.addChild(this.box);
-        // the edges follow the box's place and turn but not its scale, so they stay thin
-        this.edges = new Entity('SceneEdgeLines', app);
-        const edgeMaterial = seeThrough(cyan, 0.9);
-        for (let i = 0; i < EDGES.length; i++) {
-            const edge = new Entity('Edge', app);
-            edge.addComponent('render', { type: 'box', material: edgeMaterial, layers: [this.layer.id] });
-            this.edges.addChild(edge);
-        }
-        this.edges.enabled = false;
-        app.root.addChild(this.edges);
+        this.wall = seeThrough(cyan, 0.07);
+        this.line = seeThrough(cyan, 0.9);
+        this.root = new Entity('SceneEdge', app);
+        app.root.addChild(this.root);
     }
-    /** Show the box, or hide it with null. */
-    set(box) {
-        this.box.enabled = Boolean(box);
-        this.edges.enabled = Boolean(box);
-        if (box) {
-            this.box.setPosition(...box.center);
-            this.box.setEulerAngles(0, box.yaw ?? 0, 0);
-            this.box.setLocalScale(...box.size);
-            this._layoutEdges();
+    /** Show an edge, or hide it with null. */
+    set(edge) {
+        for (const child of this.root.children.slice()) {
+            child.destroy();
+        }
+        if (edge) {
+            const height = edge.top - edge.bottom;
+            const span = edge.segments.reduce((m, [x1, z1, x2, z2]) => Math.max(m, Math.abs(x2 - x1), Math.abs(z2 - z1)), 0);
+            const thick = Math.max(0.008, 0.002 * Math.max(height, span));
+            for (const [x1, z1, x2, z2] of edge.segments) {
+                const dx = x2 - x1;
+                const dz = z2 - z1;
+                const length = Math.hypot(dx, dz);
+                if (!length)
+                    continue;
+                const yaw = (Math.atan2(-dz, dx) * 180) / Math.PI;
+                const add = (material, y, h) => {
+                    const part = new Entity('Edge', this.app);
+                    part.addComponent('render', { type: 'box', material, layers: [this.layer.id] });
+                    part.setLocalPosition((x1 + x2) / 2, y, (z1 + z2) / 2);
+                    part.setLocalEulerAngles(0, yaw, 0);
+                    part.setLocalScale(length + thick, h, thick);
+                    this.root.addChild(part);
+                };
+                add(this.wall, (edge.bottom + edge.top) / 2, height);
+                add(this.line, edge.bottom, thick);
+                add(this.line, edge.top, thick);
+            }
         }
         this.app.renderNextFrame = true;
-    }
-    _layoutEdges() {
-        this.edges.setPosition(this.box.getPosition());
-        this.edges.setRotation(this.box.getRotation());
-        const s = this.box.getLocalScale();
-        const size = [s.x, s.y, s.z];
-        // thicker for a big scene, so the lines stay visible from far away
-        const thick = Math.max(EDGE, 0.002 * Math.max(...size));
-        this.edges.children.forEach((child, i) => {
-            const [axis, a, b] = EDGES[i];
-            const [u, v] = [0, 1, 2].filter((k) => k !== axis);
-            const position = [0, 0, 0];
-            const scale = [thick, thick, thick];
-            position[u] = (a * size[u]) / 2;
-            position[v] = (b * size[v]) / 2;
-            scale[axis] = size[axis] + thick;
-            const edge = child;
-            edge.setLocalPosition(position[0], position[1], position[2]);
-            edge.setLocalScale(scale[0], scale[1], scale[2]);
-        });
     }
 }
 
@@ -89153,131 +89133,6 @@ class AnimController {
     }
 }
 
-// Gaussian Studio: keep a point inside a ground fence (x, z polygon). Inside: unchanged.
-// Outside: moved to the nearest point on the fence. Returns true if it moved the point.
-const fencePoint = (fence, pos) => {
-    if (fence.length < 3) {
-        return false;
-    }
-    let inside = false;
-    for (let i = 0, j = fence.length - 1; i < fence.length; j = i++) {
-        const [xi, zi] = fence[i];
-        const [xj, zj] = fence[j];
-        if (zi > pos.z !== zj > pos.z && pos.x < ((xj - xi) * (pos.z - zi)) / (zj - zi) + xi) {
-            inside = !inside;
-        }
-    }
-    if (inside) {
-        return false;
-    }
-    let bestX = pos.x;
-    let bestZ = pos.z;
-    let best = Infinity;
-    for (let i = 0, j = fence.length - 1; i < fence.length; j = i++) {
-        const [ax, az] = fence[j];
-        const [bx, bz] = fence[i];
-        const dx = bx - ax;
-        const dz = bz - az;
-        const len = dx * dx + dz * dz;
-        const t = len > 0 ? Math.max(0, Math.min(1, ((pos.x - ax) * dx + (pos.z - az) * dz) / len)) : 0;
-        const cx = ax + t * dx;
-        const cz = az + t * dz;
-        const dist = (pos.x - cx) ** 2 + (pos.z - cz) ** 2;
-        if (dist < best) {
-            best = dist;
-            bestX = cx;
-            bestZ = cz;
-        }
-    }
-    pos.x = bestX;
-    pos.z = bestZ;
-    return true;
-};
-// Gaussian Studio: keep a step from going through any wall ([x1, z1, x2, z2] on the ground).
-// The point stays at least `radius` from the wall on the side it came from; only the part of
-// the move into the wall is removed, so visitors slide along it. Returns true if it pushed.
-const wallStep = (walls, from, to, radius, velocity) => {
-    let pushed = false;
-    for (const [ax, az, bx, bz] of walls) {
-        const dx = bx - ax;
-        const dz = bz - az;
-        const length = Math.hypot(dx, dz);
-        if (!length) {
-            continue;
-        }
-        const nx = -dz / length;
-        const nz = dx / length;
-        const along = ((to.x - ax) * dx + (to.z - az) * dz) / (length * length);
-        if (along < -radius / length || along > 1 + radius / length) {
-            continue; // past the wall's ends
-        }
-        const side = (from.x - ax) * nx + (from.z - az) * nz >= 0 ? 1 : -1;
-        const distance = ((to.x - ax) * nx + (to.z - az) * nz) * side;
-        if (distance < radius) {
-            to.x += nx * side * (radius - distance);
-            to.z += nz * side * (radius - distance);
-            const into = (velocity.x * nx + velocity.z * nz) * side;
-            if (into < 0) {
-                velocity.x -= nx * side * into;
-                velocity.z -= nz * side * into;
-            }
-            pushed = true;
-        }
-    }
-    return pushed;
-};
-// A point relative to the box's centre, along the box's own axes.
-const local = (box, p) => {
-    const t = ((box.yaw ?? 0) * Math.PI) / 180;
-    const dx = p.x - box.center[0];
-    const dz = p.z - box.center[2];
-    return [dx * Math.cos(t) - dz * Math.sin(t), p.y - box.center[1], dx * Math.sin(t) + dz * Math.cos(t)];
-};
-/** How far a point is outside the box (0 inside); `flat` ignores height, for walking. */
-const outsideBox = (box, p, flat = false) => {
-    const l = local(box, p);
-    let sum = 0;
-    for (let i = 0; i < 3; i++) {
-        if (flat && i === 1)
-            continue;
-        const over = Math.abs(l[i]) - box.size[i] / 2;
-        if (over > 0)
-            sum += over * over;
-    }
-    return Math.sqrt(sum);
-};
-// The box's edge is soft: a camera pushed past it meets more and more resistance, up to a
-// stretch past the edge, and springs back inside once the visitor lets go.
-/** How far past the box a camera may be stretched: 12% of its smallest side, 0.25 to 1 m. */
-const boxStretch = (box) => Math.min(1, Math.max(0.25, 0.12 * Math.min(...box.size)));
-/** The share of an outward move that goes through, for a camera already `outside` the edge. */
-const resistance = (outside, stretch) => {
-    const t = Math.min(1, outside / stretch);
-    return (1 - t) * (1 - t);
-};
-/** How quickly a released camera springs back inside: the share of the way covered per second. */
-const SPRING_RATE = 6;
-/** Move a point into the box (`margin` inside its faces). Returns true if it moved. */
-const clampToBox = (box, p, margin = 0) => {
-    const l = local(box, p);
-    let moved = false;
-    for (let i = 0; i < 3; i++) {
-        const half = Math.max(0, box.size[i] / 2 - margin);
-        const clamped = Math.max(-half, Math.min(half, l[i]));
-        if (clamped !== l[i]) {
-            l[i] = clamped;
-            moved = true;
-        }
-    }
-    if (moved) {
-        const t = ((box.yaw ?? 0) * Math.PI) / 180;
-        p.x = box.center[0] + l[0] * Math.cos(t) + l[2] * Math.sin(t);
-        p.y = box.center[1] + l[1];
-        p.z = box.center[2] - l[0] * Math.sin(t) + l[2] * Math.cos(t);
-    }
-    return moved;
-};
-
 const rotation = new Quat();
 const avec = new Vec3();
 const bvec = new Vec3();
@@ -89778,6 +89633,499 @@ const findCylinderSpawn = (collision, ox, oy, oz, halfHeight, radius, out) => {
     return found;
 };
 
+// Gaussian Studio: keep a point inside a ground fence (x, z polygon). Inside: unchanged.
+// Outside: moved to the nearest point on the fence. Returns true if it moved the point.
+const fencePoint = (fence, pos) => {
+    if (fence.length < 3) {
+        return false;
+    }
+    let inside = false;
+    for (let i = 0, j = fence.length - 1; i < fence.length; j = i++) {
+        const [xi, zi] = fence[i];
+        const [xj, zj] = fence[j];
+        if (zi > pos.z !== zj > pos.z && pos.x < ((xj - xi) * (pos.z - zi)) / (zj - zi) + xi) {
+            inside = !inside;
+        }
+    }
+    if (inside) {
+        return false;
+    }
+    let bestX = pos.x;
+    let bestZ = pos.z;
+    let best = Infinity;
+    for (let i = 0, j = fence.length - 1; i < fence.length; j = i++) {
+        const [ax, az] = fence[j];
+        const [bx, bz] = fence[i];
+        const dx = bx - ax;
+        const dz = bz - az;
+        const len = dx * dx + dz * dz;
+        const t = len > 0 ? Math.max(0, Math.min(1, ((pos.x - ax) * dx + (pos.z - az) * dz) / len)) : 0;
+        const cx = ax + t * dx;
+        const cz = az + t * dz;
+        const dist = (pos.x - cx) ** 2 + (pos.z - cz) ** 2;
+        if (dist < best) {
+            best = dist;
+            bestX = cx;
+            bestZ = cz;
+        }
+    }
+    pos.x = bestX;
+    pos.z = bestZ;
+    return true;
+};
+// Gaussian Studio: keep a step from going through any wall ([x1, z1, x2, z2] on the ground).
+// The point stays at least `radius` from the wall on the side it came from; only the part of
+// the move into the wall is removed, so visitors slide along it. Returns true if it pushed.
+const wallStep = (walls, from, to, radius, velocity) => {
+    let pushed = false;
+    for (const [ax, az, bx, bz] of walls) {
+        const dx = bx - ax;
+        const dz = bz - az;
+        const length = Math.hypot(dx, dz);
+        if (!length) {
+            continue;
+        }
+        const nx = -dz / length;
+        const nz = dx / length;
+        const along = ((to.x - ax) * dx + (to.z - az) * dz) / (length * length);
+        if (along < -radius / length || along > 1 + radius / length) {
+            continue; // past the wall's ends
+        }
+        const side = (from.x - ax) * nx + (from.z - az) * nz >= 0 ? 1 : -1;
+        const distance = ((to.x - ax) * nx + (to.z - az) * nz) * side;
+        if (distance < radius) {
+            to.x += nx * side * (radius - distance);
+            to.z += nz * side * (radius - distance);
+            const into = (velocity.x * nx + velocity.z * nz) * side;
+            if (into < 0) {
+                velocity.x -= nx * side * into;
+                velocity.z -= nz * side * into;
+            }
+            pushed = true;
+        }
+    }
+    return pushed;
+};
+// A point relative to the box's centre, along the box's own axes.
+const local = (box, p) => {
+    const t = ((box.yaw ?? 0) * Math.PI) / 180;
+    const dx = p.x - box.center[0];
+    const dz = p.z - box.center[2];
+    return [dx * Math.cos(t) - dz * Math.sin(t), p.y - box.center[1], dx * Math.sin(t) + dz * Math.cos(t)];
+};
+/** How far a point is outside the box (0 inside); `flat` ignores height, for walking. */
+const outsideBox = (box, p, flat = false) => {
+    const l = local(box, p);
+    let sum = 0;
+    for (let i = 0; i < 3; i++) {
+        if (flat && i === 1)
+            continue;
+        const over = Math.abs(l[i]) - box.size[i] / 2;
+        if (over > 0)
+            sum += over * over;
+    }
+    return Math.sqrt(sum);
+};
+// The box's edge is soft: a camera pushed past it meets more and more resistance, up to a
+// stretch past the edge, and springs back inside once the visitor lets go.
+/** The share of an outward move that goes through, for a camera already `outside` the edge. */
+const resistance = (outside, stretch) => {
+    const t = Math.min(1, outside / stretch);
+    return (1 - t) * (1 - t);
+};
+/** How quickly a released camera springs back inside: the share of the way covered per second. */
+const SPRING_RATE = 6;
+/** Move a point into the box (`margin` inside its faces). Returns true if it moved. */
+const clampToBox = (box, p, margin = 0) => {
+    const l = local(box, p);
+    let moved = false;
+    for (let i = 0; i < 3; i++) {
+        const half = Math.max(0, box.size[i] / 2 - margin);
+        const clamped = Math.max(-half, Math.min(half, l[i]));
+        if (clamped !== l[i]) {
+            l[i] = clamped;
+            moved = true;
+        }
+    }
+    if (moved) {
+        const t = ((box.yaw ?? 0) * Math.PI) / 180;
+        p.x = box.center[0] + l[0] * Math.cos(t) + l[2] * Math.sin(t);
+        p.y = box.center[1] + l[1];
+        p.z = box.center[2] - l[0] * Math.sin(t) + l[2] * Math.cos(t);
+    }
+    return moved;
+};
+
+/** A hand-set box as an edge (limits.box). */
+class BoxEdge {
+    box;
+    stretch;
+    constructor(box) {
+        this.box = box;
+        this.stretch = Math.min(1, Math.max(0.25, 0.12 * Math.min(...box.size)));
+    }
+    outside(p, flat = false) {
+        return outsideBox(this.box, p, flat);
+    }
+    inside(p, out, flat = false) {
+        const y = p.y;
+        clampToBox(this.box, out.copy(p));
+        if (flat)
+            out.y = y;
+        return out;
+    }
+    outline() {
+        const { center, size, yaw = 0 } = this.box;
+        const t = (yaw * Math.PI) / 180;
+        const corner = (x, z) => [
+            center[0] + x * Math.cos(t) + z * Math.sin(t),
+            center[2] - x * Math.sin(t) + z * Math.cos(t)
+        ];
+        const [hx, , hz] = size.map((s) => s / 2);
+        const c = [corner(-hx, -hz), corner(hx, -hz), corner(hx, hz), corner(-hx, hz)];
+        return {
+            segments: c.map((a, i) => [...a, ...c[(i + 1) % 4]]),
+            bottom: center[1] - size[1] / 2,
+            top: center[1] + size[1] / 2
+        };
+    }
+}
+// How a tightness shapes the footprint: a ground cell belongs to the scene when it holds at
+// least `density` times the typical cell's splats; `margin` is the room left around it (in
+// cells), and `trim` the share of splats left out at the bottom and top for its height.
+const SHAPE = {
+    tight: { density: 0.25, margin: 0, trim: 0.01, pad: 0.04 },
+    normal: { density: 0.1, margin: 1.5, trim: 0.003, pad: 0.08 },
+    loose: { density: 0.04, margin: 4, trim: 0.001, pad: 0.14 }
+};
+const MAX_SAMPLES = 200000;
+const CELLS = 128; // across the scene's longer side on the ground
+/**
+ * The captured space as a floor plan: the ground cells with enough splats above or below them
+ * (floors, walls, furniture: a room's open middle counts too), enclosed gaps filled, stray
+ * islands dropped, extruded between the dense part's floor and ceiling. Distances to it are
+ * interpolated, so the edge feels smooth rather than stepped.
+ */
+class FootprintEdge {
+    x0;
+    z0;
+    cell;
+    nx;
+    nz;
+    dist;
+    margin;
+    bottom;
+    top;
+    mask;
+    stretch;
+    constructor(x0, z0, cell, nx, nz, dist, // per cell: distance to the footprint, in scene units
+    margin, bottom, top, mask) {
+        this.x0 = x0;
+        this.z0 = z0;
+        this.cell = cell;
+        this.nx = nx;
+        this.nz = nz;
+        this.dist = dist;
+        this.margin = margin;
+        this.bottom = bottom;
+        this.top = top;
+        this.mask = mask;
+        this.stretch = Math.min(3, Math.max(0.25, 3 * cell));
+    }
+    /** Distance from the footprint at a ground point, interpolated between cell centres. */
+    ground(x, z) {
+        const fx = (x - this.x0) / this.cell - 0.5;
+        const fz = (z - this.z0) / this.cell - 0.5;
+        const cx = Math.min(this.nx - 1, Math.max(0, fx));
+        const cz = Math.min(this.nz - 1, Math.max(0, fz));
+        // beyond the grid: the distance to it, plus its edge's distance
+        const beyond = Math.hypot(fx - cx, fz - cz) * this.cell;
+        const ix = Math.min(this.nx - 2, Math.floor(cx));
+        const iz = Math.min(this.nz - 2, Math.floor(cz));
+        const tx = cx - ix;
+        const tz = cz - iz;
+        const d = this.dist;
+        const at = (i, k) => d[k * this.nx + i];
+        const v = at(ix, iz) * (1 - tx) * (1 - tz) +
+            at(ix + 1, iz) * tx * (1 - tz) +
+            at(ix, iz + 1) * (1 - tx) * tz +
+            at(ix + 1, iz + 1) * tx * tz;
+        return v + beyond;
+    }
+    outside(p, flat = false) {
+        const h = Math.max(0, this.ground(p.x, p.z) - this.margin);
+        if (flat)
+            return h;
+        const v = Math.max(0, this.bottom - p.y, p.y - this.top);
+        return Math.hypot(h, v);
+    }
+    inside(p, out, flat = false) {
+        out.copy(p);
+        // walk down the distance's slope, a few steps, to the footprint
+        for (let i = 0; i < 4; i++) {
+            const h = this.ground(out.x, out.z) - this.margin;
+            if (h <= 1e-4)
+                break;
+            const e = this.cell * 0.5;
+            const gx = this.ground(out.x + e, out.z) - this.ground(out.x - e, out.z);
+            const gz = this.ground(out.x, out.z + e) - this.ground(out.x, out.z - e);
+            const g = Math.hypot(gx, gz);
+            if (g < 1e-9)
+                break;
+            out.x -= (gx / g) * h;
+            out.z -= (gz / g) * h;
+        }
+        if (!flat)
+            out.y = Math.min(this.top, Math.max(this.bottom, out.y));
+        return out;
+    }
+    outline() {
+        // the edge's boundary as cell edges, merged into runs
+        const { nx, nz, cell, x0, z0 } = this;
+        // where the edge is: the footprint and the margin around it
+        const filled = (i, k) => i >= 0 && k >= 0 && i < nx && k < nz && this.dist[k * nx + i] <= this.margin + 1e-6;
+        const segments = [];
+        for (let k = 0; k <= nz; k++) {
+            let run = -1;
+            for (let i = 0; i <= nx; i++) {
+                const edge = i < nx && filled(i, k - 1) !== filled(i, k);
+                if (edge && run < 0)
+                    run = i;
+                if (!edge && run >= 0) {
+                    segments.push([x0 + run * cell, z0 + k * cell, x0 + i * cell, z0 + k * cell]);
+                    run = -1;
+                }
+            }
+        }
+        for (let i = 0; i <= nx; i++) {
+            let run = -1;
+            for (let k = 0; k <= nz; k++) {
+                const edge = k < nz && filled(i - 1, k) !== filled(i, k);
+                if (edge && run < 0)
+                    run = k;
+                if (!edge && run >= 0) {
+                    segments.push([x0 + i * cell, z0 + run * cell, x0 + i * cell, z0 + k * cell]);
+                    run = -1;
+                }
+            }
+        }
+        return { segments, bottom: this.bottom, top: this.top };
+    }
+    /** Widen the edge so a point (the start view) is within it. */
+    include(p) {
+        const h = this.ground(p.x, p.z);
+        if (h > this.margin)
+            this.margin = h + this.cell;
+        this.bottom = Math.min(this.bottom, p.y - this.cell);
+        this.top = Math.max(this.top, p.y + this.cell);
+    }
+}
+/**
+ * The splat's centres as the engine holds them. A streamed splat comes in detail levels, finer
+ * near the camera; mixing them would make the space near the camera look denser than the rest,
+ * so only the coarsest level counts: it covers the whole scene evenly. `complete` is false while
+ * some of its files have not loaded yet.
+ */
+const centerBlocks = (entity) => {
+    const resource = entity.gsplat.resource;
+    if (!resource)
+        return { blocks: [], complete: false };
+    const octree = resource.octree;
+    if (octree?.fileResources) {
+        const coarsest = octree.lodLevels - 1;
+        const wanted = octree.files.map((f, i) => (f.lodLevel === coarsest ? i : -1)).filter((i) => i >= 0);
+        const blocks = wanted.map((i) => octree.fileResources.get(i)?.centers).filter((c) => !!c);
+        return { blocks, complete: blocks.length === wanted.length };
+    }
+    return { blocks: resource.centers ? [resource.centers] : [], complete: !!resource.centers };
+};
+/** A sample of the splat's centres in world space, as x, y, z arrays. */
+const sampleCenters = (entity, partial) => {
+    const { blocks, complete } = centerBlocks(entity);
+    if (!complete && !partial)
+        return null;
+    const total = blocks.reduce((sum, block) => sum + block.length / 3, 0);
+    if (total < 100)
+        return null;
+    const stride = Math.max(1, Math.floor(total / MAX_SAMPLES));
+    const count = Math.floor(total / stride);
+    const xs = new Float32Array(count);
+    const ys = new Float32Array(count);
+    const zs = new Float32Array(count);
+    const world = entity.getWorldTransform();
+    const p = new Vec3();
+    let n = 0;
+    let skip = 0;
+    for (const block of blocks) {
+        for (let i = 0; i < block.length && n < count; i += 3) {
+            if (skip++ % stride)
+                continue;
+            world.transformPoint(p.set(block[i], block[i + 1], block[i + 2]), p);
+            xs[n] = p.x;
+            ys[n] = p.y;
+            zs[n] = p.z;
+            n++;
+        }
+    }
+    return { xs: xs.subarray(0, n), ys: ys.subarray(0, n), zs: zs.subarray(0, n), n };
+};
+const quantile = (values, q) => {
+    const sorted = Float32Array.from(values).sort();
+    return sorted[Math.min(sorted.length - 1, Math.max(0, Math.round(q * (sorted.length - 1))))];
+};
+/** The cells reachable from `start` through side neighbours that are `open`; marks them in `seen`. */
+const flood = (open, start, nx, nz, seen) => {
+    const cells = [start];
+    seen[start] = 1;
+    for (let c = 0; c < cells.length; c++) {
+        const j = cells[c];
+        const i = j % nx;
+        const k = (j - i) / nx;
+        for (const [di, dk] of [
+            [1, 0],
+            [-1, 0],
+            [0, 1],
+            [0, -1]
+        ]) {
+            const ii = i + di;
+            const kk = k + dk;
+            if (ii < 0 || kk < 0 || ii >= nx || kk >= nz)
+                continue;
+            const jj = kk * nx + ii;
+            if (!seen[jj] && open(jj)) {
+                seen[jj] = 1;
+                cells.push(jj);
+            }
+        }
+    }
+    return cells;
+};
+/**
+ * Gaussian Studio: the scene's automatic edge, from a sample of the splat's centres (for a
+ * streamed splat, its coarsest level). Null until those have loaded, unless `partial`.
+ */
+const sceneEdge = (entity, tightness = 'normal', partial = false) => {
+    const sample = sampleCenters(entity, partial);
+    if (!sample)
+        return null;
+    const { xs, ys, zs, n } = sample;
+    const shape = SHAPE[tightness];
+    // the grid covers the splat on the ground, without its farthest floaters
+    const lo = [quantile(xs, 0.001), quantile(zs, 0.001)];
+    const hi = [quantile(xs, 0.999), quantile(zs, 0.999)];
+    const pad = 0.1 * Math.max(hi[0] - lo[0], hi[1] - lo[1]);
+    const x0 = lo[0] - pad;
+    const z0 = lo[1] - pad;
+    const cell = Math.max(0.05, (Math.max(hi[0] - lo[0], hi[1] - lo[1]) + 2 * pad) / CELLS);
+    const nx = Math.max(2, Math.ceil((hi[0] - lo[0] + 2 * pad) / cell));
+    const nz = Math.max(2, Math.ceil((hi[1] - lo[1] + 2 * pad) / cell));
+    const counts = new Uint32Array(nx * nz);
+    for (let i = 0; i < n; i++) {
+        const ci = Math.floor((xs[i] - x0) / cell);
+        const ck = Math.floor((zs[i] - z0) / cell);
+        if (ci >= 0 && ck >= 0 && ci < nx && ck < nz)
+            counts[ck * nx + ci]++;
+    }
+    // dense cells: enough splats compared with the typical occupied cell
+    const occupied = Float32Array.from([...counts].filter((c) => c > 0));
+    if (!occupied.length)
+        return null;
+    const typical = quantile(occupied, 0.5);
+    const threshold = Math.max(2, shape.density * typical);
+    const mask = new Uint8Array(nx * nz);
+    for (let j = 0; j < mask.length; j++)
+        mask[j] = counts[j] >= threshold ? 1 : 0;
+    // fill enclosed gaps: empty cells that cannot reach the grid's border are inside
+    const air = new Uint8Array(nx * nz);
+    const fromBorder = (j) => {
+        if (!mask[j] && !air[j])
+            flood((jj) => !mask[jj], j, nx, nz, air);
+    };
+    for (let i = 0; i < nx; i++) {
+        fromBorder(i);
+        fromBorder((nz - 1) * nx + i);
+    }
+    for (let k = 0; k < nz; k++) {
+        fromBorder(k * nx);
+        fromBorder(k * nx + nx - 1);
+    }
+    for (let j = 0; j < mask.length; j++)
+        if (!air[j])
+            mask[j] = 1;
+    // keep the largest connected part: stray islands of floaters drop out
+    const seen = new Uint8Array(nx * nz);
+    let largest = [];
+    for (let j = 0; j < mask.length; j++) {
+        if (mask[j] && !seen[j]) {
+            const part = flood((jj) => mask[jj] === 1, j, nx, nz, seen);
+            if (part.length > largest.length)
+                largest = part;
+        }
+    }
+    mask.fill(0);
+    for (const j of largest)
+        mask[j] = 1;
+    // distance from every cell to the footprint (two chamfer passes; 1 and √2 cell steps)
+    const dist = new Float32Array(nx * nz);
+    for (let j = 0; j < dist.length; j++)
+        dist[j] = mask[j] ? 0 : 1e9;
+    const D = Math.SQRT2;
+    for (let k = 0; k < nz; k++) {
+        for (let i = 0; i < nx; i++) {
+            const j = k * nx + i;
+            let d = dist[j];
+            if (i > 0)
+                d = Math.min(d, dist[j - 1] + 1);
+            if (k > 0)
+                d = Math.min(d, dist[j - nx] + 1);
+            if (i > 0 && k > 0)
+                d = Math.min(d, dist[j - nx - 1] + D);
+            if (i < nx - 1 && k > 0)
+                d = Math.min(d, dist[j - nx + 1] + D);
+            dist[j] = d;
+        }
+    }
+    for (let k = nz - 1; k >= 0; k--) {
+        for (let i = nx - 1; i >= 0; i--) {
+            const j = k * nx + i;
+            let d = dist[j];
+            if (i < nx - 1)
+                d = Math.min(d, dist[j + 1] + 1);
+            if (k < nz - 1)
+                d = Math.min(d, dist[j + nx] + 1);
+            if (i < nx - 1 && k < nz - 1)
+                d = Math.min(d, dist[j + nx + 1] + D);
+            if (i > 0 && k < nz - 1)
+                d = Math.min(d, dist[j + nx - 1] + D);
+            dist[j] = d;
+        }
+    }
+    for (let j = 0; j < dist.length; j++)
+        dist[j] *= cell;
+    // the height range: the splats over the footprint, without the farthest above and below
+    const over = [];
+    for (let i = 0; i < n; i++) {
+        const ci = Math.floor((xs[i] - x0) / cell);
+        const ck = Math.floor((zs[i] - z0) / cell);
+        if (ci >= 0 && ck >= 0 && ci < nx && ck < nz && mask[ck * nx + ci])
+            over.push(ys[i]);
+    }
+    const heights = Float32Array.from(over.length ? over : ys);
+    const bottom = quantile(heights, shape.trim);
+    const top = quantile(heights, 1 - shape.trim);
+    const vpad = (top - bottom) * shape.pad;
+    return new FootprintEdge(x0, z0, cell, nx, nz, dist, shape.margin * cell, bottom - vpad, top + vpad, mask);
+};
+const holdPoint = new Vec3();
+/** Pull a point back toward the edge until it is at most `limit` beyond it. */
+const holdWithin = (edge, p, limit, flat = false) => {
+    const out = edge.outside(p, flat);
+    if (out > limit) {
+        edge.inside(p, holdPoint, flat);
+        p.lerp(holdPoint, p, limit / out);
+    }
+};
+
 const stepFrom = new Vec3();
 const home$2 = new Vec3();
 /** Radius of the camera collision sphere (meters) */
@@ -89908,34 +90256,34 @@ class FlyController {
     _storeSpawn() {
         this._spawn.store(this._position, this._angles, this._distance);
     }
-    /** Gaussian Studio: the boundary box, soft at its edge; flying stays near it. */
-    box = null;
+    /** Gaussian Studio: the scene's soft edge; flying stays near it. */
+    edge = null;
     _step(move, dt) {
         setCameraBasis(this._angles, forward$2, right$2, up$1);
         setBasisOffset(offset$1, move[0], move[1], move[2], forward$2, right$2, up$1);
         stepFrom.copy(this._position);
         this._mover.move(this._position, offset$1);
-        if (this.box && this._softBox(stepFrom, move, dt)) {
+        if (this.edge && this._softEdge(stepFrom, move, dt)) {
             this._mover.reset(this._position);
         }
     }
     /**
-     * Gaussian Studio: past the box's edge an outward step keeps only the share the
+     * Gaussian Studio: past the edge an outward step keeps only the share the
      * resistance lets through (none past the stretch); let go outside, the camera eases back.
      */
-    _softBox(from, move, dt) {
-        const box = this.box;
-        const stretch = boxStretch(box);
-        const before = outsideBox(box, from);
-        if (outsideBox(box, this._position) > before + 1e-6) {
+    _softEdge(from, move, dt) {
+        const edge = this.edge;
+        const stretch = edge.stretch;
+        const before = edge.outside(from);
+        if (edge.outside(this._position) > before + 1e-6) {
             this._position.lerp(from, this._position, resistance(before, stretch));
-            clampToBox(box, this._position, -stretch);
+            holdWithin(edge, this._position, stretch);
             return true;
         }
         if (move.some((v) => Math.abs(v) > 1e-9) || before < 1e-4) {
             return false;
         }
-        clampToBox(box, home$2.copy(this._position));
+        edge.inside(this._position, home$2);
         this._position.lerp(this._position, home$2, Math.min(1, SPRING_RATE * dt));
         return true;
     }
@@ -90231,7 +90579,7 @@ class OrbitController {
         const easedZoom = engine._childPose.position.z;
         const pose = this.controller.update(inputFrame, deltaTime);
         const held = this.barriers && this._holdAtBarriers(prevRoot, prevZoom, prevAngles);
-        const softened = this.barriers?.box && this._softBox(prevRoot, prevZoom, prevAngles, input, deltaTime);
+        const softened = this.barriers?.edge && this._softEdge(prevRoot, prevZoom, prevAngles, input, deltaTime);
         if (held || softened) {
             // the engine already eased toward the targets before they were held: redo this
             // frame's easing toward the held ones, or the view would creep past the barrier
@@ -90315,22 +90663,22 @@ class OrbitController {
         return true;
     }
     /**
-     * The soft box, on the targets: an outward move keeps only the share the resistance lets
+     * The soft edge, on the targets: an outward move keeps only the share the resistance lets
      * through (none past the stretch), and with no input a camera outside springs back in.
      * Returns true if it changed the targets.
      */
-    _softBox(prevFocus, prevZoom, prevTurn, input, dt) {
-        const box = this.barriers.box;
+    _softEdge(prevFocus, prevZoom, prevTurn, input, dt) {
+        const edge = this.barriers.edge;
         const root = this._root();
         const child = this._child();
         const at = (focus, z, angles, out) => {
             turn.setFromEulerAngles(angles);
             return turn.transformVector(out.set(0, 0, z), out).add(focus);
         };
-        const stretch = boxStretch(box);
+        const stretch = edge.stretch;
         at(prevFocus, prevZoom, prevTurn, camFrom);
-        const before = outsideBox(box, camFrom);
-        const after = outsideBox(box, at(root.position, child.position.z, root.angles, camTo));
+        const before = edge.outside(camFrom);
+        const after = edge.outside(at(root.position, child.position.z, root.angles, camTo));
         if (after > before + 1e-6) {
             const share = resistance(before, stretch);
             root.position.lerp(prevFocus, root.position, share);
@@ -90338,7 +90686,7 @@ class OrbitController {
             const arc = (a, b) => a + (((b - a + 540) % 360) - 180) * share;
             root.angles.set(arc(prevTurn.x, root.angles.x), arc(prevTurn.y, root.angles.y), arc(prevTurn.z, root.angles.z));
             child.position.z = prevZoom + (child.position.z - prevZoom) * share;
-            if (outsideBox(box, at(root.position, child.position.z, root.angles, camTo)) > stretch) {
+            if (edge.outside(at(root.position, child.position.z, root.angles, camTo)) > stretch) {
                 root.position.copy(prevFocus);
                 root.angles.copy(prevTurn);
                 child.position.z = prevZoom;
@@ -90348,9 +90696,9 @@ class OrbitController {
         if (input || before < 1e-4) {
             return false;
         }
-        // let go outside the box: ease the camera back in
+        // let go outside the edge: ease the camera back in
         const k = Math.min(1, SPRING_RATE * dt);
-        clampToBox(box, home$1.copy(camFrom));
+        edge.inside(camFrom, home$1);
         if (this._limits?.target) {
             // a fixed orbit point cannot move: come in along the view instead
             child.position.z = Math.max(this._zoom.x, prevZoom - camFrom.distance(home$1) * k);
@@ -90437,8 +90785,8 @@ class WalkController {
      * Gaussian Studio: ground outline visitors cannot leave, [x, z] corners in order.
      */
     fence = null;
-    /** Gaussian Studio: the boundary box, soft at its edge (on the ground: height is free). */
-    box = null;
+    /** Gaussian Studio: the scene's soft edge (on the ground: height is free). */
+    edge = null;
     /**
      * Gaussian Studio: walls visitors cannot walk through, [x1, z1, x2, z2].
      */
@@ -90711,8 +91059,8 @@ class WalkController {
             this._velocity.x = 0;
             this._velocity.z = 0;
         }
-        if (this.box) {
-            this._softBox(dt, move);
+        if (this.edge) {
+            this._softEdge(dt, move);
         }
         // the walls: never through one; slide along it
         if (this.walls) {
@@ -90720,35 +91068,29 @@ class WalkController {
         }
     }
     /**
-     * Past the box's outline an outward step keeps only the share the resistance lets through
+     * Past the edge an outward step keeps only the share the resistance lets through
      * (none past the stretch); standing still outside, the walker is eased back in.
      */
-    _softBox(dt, move) {
-        const box = this.box;
-        const stretch = boxStretch(box);
-        const before = outsideBox(box, stepStart, true);
-        if (outsideBox(box, this._position, true) > before + 1e-6) {
+    _softEdge(dt, move) {
+        const edge = this.edge;
+        const stretch = edge.stretch;
+        const before = edge.outside(stepStart, true);
+        if (edge.outside(this._position, true) > before + 1e-6) {
             const share = resistance(before, stretch);
             this._position.x = stepStart.x + (this._position.x - stepStart.x) * share;
             this._position.z = stepStart.z + (this._position.z - stepStart.z) * share;
             this._velocity.x *= share;
             this._velocity.z *= share;
-            if (outsideBox(box, this._position, true) > stretch) {
-                const y = this._position.y;
-                clampToBox(box, this._position, -stretch);
-                this._position.y = y;
-            }
+            holdWithin(edge, this._position, stretch, true);
             return;
         }
         if (Math.abs(move[0]) > 1e-9 || Math.abs(move[2]) > 1e-9 || before < 1e-4) {
             return;
         }
-        const y = this._position.y;
-        clampToBox(box, home.copy(this._position));
+        edge.inside(this._position, home, true);
         const k = Math.min(1, SPRING_RATE * dt);
         this._position.x += (home.x - this._position.x) * k;
         this._position.z += (home.z - this._position.z) * k;
-        this._position.y = y;
         this._velocity.x = 0;
         this._velocity.z = 0;
     }
@@ -91059,7 +91401,7 @@ class CameraManager {
     setCollision;
     // Gaussian Studio: set (or clear) the scene's soft edge after construction; the automatic
     // edge is computed from the splat once it has loaded.
-    setBox;
+    setEdge;
     // holds the camera state
     camera = new Camera();
     constructor(global, bbox, collision = null) {
@@ -91109,13 +91451,13 @@ class CameraManager {
         // For visitors (the editor passes no limits, so it moves freely): the soft box holds
         // every mode. The orbit camera bumps into the scene, the walls and the fence only when
         // the scene asks for it; walking always does, flying unless it is turned off.
-        let box = limits?.box ?? null;
-        controllers.walk.box = box;
-        controllers.fly.box = box;
+        let edge = limits?.box ? new BoxEdge(limits.box) : null;
+        controllers.walk.edge = edge;
+        controllers.fly.edge = edge;
         const orbitWalls = Boolean(limits?.walk?.holdOrbit);
         if (limits) {
             controllers.orbit.barriers = {
-                box,
+                edge,
                 walls: orbitWalls ? controllers.walk.walls : null,
                 fence: orbitWalls ? controllers.walk.fence : null
             };
@@ -91183,12 +91525,12 @@ class CameraManager {
             transitionTurnEase = turnEase;
         };
         this.transitionProgress = () => (transitionTimer < 1 ? transitionEase(transitionTimer) : 1);
-        this.setBox = (value) => {
-            box = value;
-            controllers.walk.box = value;
-            controllers.fly.box = value;
+        this.setEdge = (value) => {
+            edge = value;
+            controllers.walk.edge = value;
+            controllers.fly.edge = value;
             if (controllers.orbit.barriers) {
-                controllers.orbit.barriers.box = value;
+                controllers.orbit.barriers.edge = value;
             }
         };
         this.setCollision = (value) => {
@@ -91231,9 +91573,9 @@ class CameraManager {
             }
             // Gaussian Studio: how hard the camera is pressed past the box's soft edge, 0 to 1,
             // for the page to show (a glow at the screen's edges)
-            if (box && state.cameraMode !== 'anim') {
-                const outside = outsideBox(box, this.camera.position, state.cameraMode === 'walk');
-                const pressure = Math.min(1, outside / boxStretch(box));
+            if (edge && state.cameraMode !== 'anim') {
+                const outside = edge.outside(this.camera.position, state.cameraMode === 'walk');
+                const pressure = Math.min(1, outside / edge.stretch);
                 if (Math.abs(pressure - edgePressure) > 0.02 || (pressure === 0 && edgePressure !== 0)) {
                     edgePressure = pressure;
                     events.fire('edgePressure:changed', pressure);
@@ -98631,64 +98973,6 @@ class StochasticSplatRenderer {
     }
 }
 
-// The share of splats left outside on each side of each axis: stray floaters live there.
-const TRIM = { tight: 0.02, normal: 0.005, loose: 0.002 };
-// Room added beyond the dense part, as a share of its size on that axis.
-const MARGIN = 0.08;
-const MAX_SAMPLES = 200000;
-/** Every block of splat centres the engine holds for this splat (a streamed one holds several). */
-const centerBlocks = (entity) => {
-    const resource = entity.gsplat.resource;
-    if (!resource)
-        return [];
-    if (resource.octree?.fileResources) {
-        return [...resource.octree.fileResources.values()].map((r) => r.centers).filter((c) => !!c);
-    }
-    return resource.centers ? [resource.centers] : [];
-};
-/**
- * Gaussian Studio: the automatic scene edge, a box around the dense part of the splat in world
- * space: per axis, the splat centres from `trim` to `1 - trim`, plus a small margin. Computed
- * from a sample of the centres the engine has loaded (for a streamed splat, the coarse level is
- * enough). Null until centres are loaded.
- */
-const sceneEdge = (entity, tightness = 'normal') => {
-    const blocks = centerBlocks(entity);
-    const total = blocks.reduce((sum, block) => sum + block.length / 3, 0);
-    if (total < 100)
-        return null;
-    const stride = Math.max(1, Math.floor(total / MAX_SAMPLES));
-    const count = Math.floor(total / stride);
-    const axes = [new Float32Array(count), new Float32Array(count), new Float32Array(count)];
-    const world = entity.getWorldTransform();
-    const p = new Vec3();
-    let n = 0;
-    let skip = 0;
-    for (const block of blocks) {
-        for (let i = 0; i < block.length && n < count; i += 3) {
-            if (skip++ % stride)
-                continue;
-            world.transformPoint(p.set(block[i], block[i + 1], block[i + 2]), p);
-            axes[0][n] = p.x;
-            axes[1][n] = p.y;
-            axes[2][n] = p.z;
-            n++;
-        }
-    }
-    const trim = TRIM[tightness];
-    const center = [0, 0, 0];
-    const size = [0, 0, 0];
-    for (let a = 0; a < 3; a++) {
-        const sorted = axes[a].subarray(0, n).sort();
-        const lo = sorted[Math.floor(trim * (n - 1))];
-        const hi = sorted[Math.ceil((1 - trim) * (n - 1))];
-        const pad = (hi - lo) * MARGIN;
-        center[a] = (lo + hi) / 2;
-        size[a] = Math.max(0.5, hi - lo + 2 * pad);
-    }
-    return { center, size, yaw: 0 };
-};
-
 // ---------------------------------------------------------------------------
 // WGSL compute shader: ray-march through the sparse voxel octree per pixel
 // ---------------------------------------------------------------------------
@@ -101960,8 +102244,8 @@ class Viewer {
     cameraFrame;
     inputController;
     cameraManager;
-    // Gaussian Studio: the splat, for computing the scene's automatic edge
-    splatEntity = null;
+    // Gaussian Studio: the scene's automatic edges, by tightness, once found
+    edges = new Map();
     picker;
     voxelOverlay = null;
     meshOverlay = null;
@@ -102268,25 +102552,35 @@ class Viewer {
             events.fire('picker:ready', this.picker);
             this.inputController = new InputController(global, this.picker);
             this.cameraManager = new CameraManager(global, sceneBound);
-            this.splatEntity = results[0];
             // Gaussian Studio: the scene's soft edge, from the splat once its centres are in
-            // (for visitors: the editor passes no limits). A hand-set box wins.
-            const edge = config.limits?.edge ?? 'normal';
-            if (config.limits && !config.limits.box && edge !== 'off') {
-                let tries = 0;
-                const findEdge = () => {
-                    if (this.destroyed)
-                        return;
-                    const box = this.sceneEdge(edge);
-                    if (box) {
-                        this.cameraManager.setBox(box);
+            // (for visitors: the editor passes no limits). It always takes in the start view, so
+            // nobody is pulled away from it. A hand-set box wins.
+            // The edges are found once, as soon as the coarse level has loaded (the engine may
+            // drop it later, once finer detail is in view), and kept for the editor's preview.
+            const tightness = config.limits?.edge ?? 'normal';
+            const start = this.cameraManager.camera.position.clone();
+            const visitorEdge = Boolean(config.limits && !config.limits.box && tightness !== 'off');
+            let tries = 0;
+            const findEdges = () => {
+                if (this.destroyed)
+                    return;
+                // wait for the whole coarse level; after a while, take what has loaded
+                const partial = ++tries > 15;
+                const edges = ['tight', 'normal', 'loose'].map((t) => [t, sceneEdge(results[0], t, partial)]);
+                if (edges.every(([, edge]) => edge)) {
+                    for (const [t, edge] of edges)
+                        this.edges.set(t, edge);
+                    if (visitorEdge) {
+                        const edge = this.edges.get(tightness);
+                        edge.include(start);
+                        this.cameraManager.setEdge(edge);
                     }
-                    else if (++tries < 30) {
-                        setTimeout(findEdge, 1000);
-                    }
-                };
-                findEdge();
-            }
+                }
+                else if (tries < 30) {
+                    setTimeout(findEdges, 1000);
+                }
+            };
+            findEdges();
             applyCamera(this.cameraManager.camera);
             if (config.ui) {
                 this.navCursor = new NavCursor(app, camera, null, events, state, config.reticle);
@@ -102444,7 +102738,7 @@ class Viewer {
     }
     /** Gaussian Studio: the automatic scene edge for a tightness, or null before the splat loads. */
     sceneEdge(tightness = 'normal') {
-        return this.splatEntity ? sceneEdge(this.splatEntity, tightness) : null;
+        return this.edges.get(tightness) ?? null;
     }
     selectAnnotation(index) {
         this.requireLoaded('selectAnnotation');
@@ -103158,7 +103452,17 @@ const createViewer = async (options) => {
             wallOverlay ??= new WallOverlay(app, camera);
             wallOverlay.set(walls);
         },
-        sceneEdge: (tightness) => viewer.sceneEdge(tightness),
+        sceneEdge: (tightness) => {
+            const edge = viewer.sceneEdge(tightness);
+            if (!edge)
+                return null;
+            const outline = edge.outline();
+            const p = new Vec3();
+            return {
+                ...outline,
+                outside: (point) => edge.outside(p.set(...point))
+            };
+        },
         showEdge: (box) => {
             boxOverlay ??= new BoxOverlay(app, camera);
             boxOverlay.set(box);
