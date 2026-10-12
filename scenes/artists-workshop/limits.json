@@ -1,0 +1,32 @@
+{
+  "mode": "walk",
+  "modes": [
+    "orbit",
+    "walk"
+  ],
+  "preset": "room",
+  "collision": {
+    "orbit": true,
+    "fly": true
+  },
+  "edge": "normal",
+  "walk": {
+    "walls": [
+      [
+        3.165,
+        -0.3,
+        3.104,
+        -2.65,
+        -1.85
+      ],
+      [
+        2.905,
+        -0.05,
+        3.202,
+        -4.85,
+        0.1
+      ]
+    ],
+    "floor": 0
+  }
+}
