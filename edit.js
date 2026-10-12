@@ -60,9 +60,9 @@ const MODES = ['orbit', 'walk', 'fly'];
 // Scene types: sensible defaults for the modes and what the camera bumps into. Anything changed
 // under Advanced makes the scene Custom.
 const PRESETS = {
-    object: { modes: ['orbit'], mode: 'orbit', collision: { orbit: false, fly: true }, holdOrbit: false },
-    room: { modes: ['orbit', 'walk'], mode: 'walk', collision: { orbit: false, fly: true }, holdOrbit: false },
-    place: { modes: ['orbit', 'walk', 'fly'], mode: 'orbit', collision: { orbit: false, fly: true }, holdOrbit: false }
+    object: { modes: ['orbit'], mode: 'orbit', collision: { orbit: true, fly: true }, holdOrbit: false },
+    room: { modes: ['orbit', 'walk'], mode: 'walk', collision: { orbit: true, fly: true }, holdOrbit: false },
+    place: { modes: ['orbit', 'walk', 'fly'], mode: 'orbit', collision: { orbit: true, fly: true }, holdOrbit: false }
 };
 const PRESET_HINTS = {
     object: 'Visitors circle one subject: orbit only, around a fixed point. Set the point below.',
@@ -105,6 +105,9 @@ const buildLimits = () => {
         const orbit = {};
         if (draft.orbitTarget) {
             orbit.target = draft.orbitTarget.map((v) => round(v, 3));
+            if (draft.orbitNudge > 0) {
+                orbit.targetPan = draft.orbitNudge;
+            }
         }
         if (m.left !== undefined && m.right !== undefined) {
             orbit.yaw = yawRange(m.left, m.right, draft.startYaw).map((v) => round(v, 1));
@@ -317,9 +320,15 @@ const render = () => {
     $('#out-orbit-point').textContent = draft.orbitTarget
         ? `fixed at ${draft.orbitTarget.map((v) => round(v, 2)).join(', ')}`
         : 'not fixed: visitors can pan and click a new point';
-    $('#pan').disabled = Boolean(draft.orbitTarget);
+    $('#pan-row').hidden = Boolean(draft.orbitTarget);
+    $('#pan-pinned').hidden = !draft.orbitTarget;
+    $('#nudge-row').hidden = !draft.orbitTarget;
+    $('#nudge-hint').hidden = !draft.orbitTarget || !(draft.orbitNudge > 0);
+    $('#orbit-nudge').value = String(draft.orbitNudge ?? 0);
+    $('#stop-walls').checked = draft.collision.orbit;
+    $('#stay-in').checked = draft.edge !== 'off';
     for (const input of document.querySelectorAll('input[name="edge"]')) {
-        input.checked = input.value === draft.edge;
+        input.checked = input.value === (draft.edge === 'off' ? draft.edgeTightness : draft.edge);
     }
     $('#out-edge').textContent = describeEdge();
 
@@ -372,7 +381,6 @@ const render = () => {
     }
     $('#preset-hint').textContent = PRESET_HINTS[preset];
     $('#object-point').hidden = preset !== 'object' && !draft.orbitTarget;
-    $('#collide-orbit').checked = draft.collision.orbit;
     $('#collide-fly').checked = draft.collision.fly;
     $('#walls-orbit').checked = draft.holdOrbit;
 
@@ -566,14 +574,32 @@ const wire = () => {
     });
     for (const input of document.querySelectorAll('input[name="edge"]')) {
         input.addEventListener('change', () => {
-            draft.edge = input.value;
+            draft.edge = draft.edgeTightness = input.value;
             saveDraft();
             render();
             previewEdge();
         });
     }
+    $('#stay-in').addEventListener('change', () => {
+        draft.edge = $('#stay-in').checked ? (draft.edgeTightness ?? 'normal') : 'off';
+        saveDraft();
+        render();
+        previewEdge();
+    });
+    $('#stop-walls').addEventListener('change', () => {
+        draft.collision = { ...draft.collision, orbit: $('#stop-walls').checked };
+        saveDraft();
+        render();
+    });
+    $('#orbit-nudge').addEventListener('change', () => {
+        draft.orbitNudge = Number($('#orbit-nudge').value);
+        saveDraft();
+        render();
+    });
     $('#orbit-point').addEventListener('click', () => {
         if (!ensureOrbit()) return;
+        // a first orbit point lets visitors nudge the view a little
+        if (!draft.orbitTarget) draft.orbitNudge = 0.3;
         draft.orbitTarget = pose().focus;
         saveDraft();
         render();
@@ -654,7 +680,7 @@ const wire = () => {
                 : `${input.value[0].toUpperCase()}${input.value.slice(1)} settings applied.`);
         });
     }
-    for (const [id, key] of [['#collide-orbit', 'orbit'], ['#collide-fly', 'fly']]) {
+    for (const [id, key] of [['#collide-fly', 'fly']]) {
         $(id).addEventListener('change', () => {
             draft.collision = { ...draft.collision, [key]: $(id).checked };
             saveDraft();
@@ -823,9 +849,11 @@ const draftFrom = (limits, settings) => {
         mode: limits?.mode ?? null,
         modes: limits?.modes?.length ? [...limits.modes] : limits?.mode ? [limits.mode] : [...MODES],
         orbitTarget: orbit?.target ?? null,
-        collision: { orbit: limits?.collision?.orbit ?? false, fly: limits?.collision?.fly ?? true },
+        collision: { orbit: limits?.collision?.orbit ?? true, fly: limits?.collision?.fly ?? true },
+        orbitNudge: orbit?.targetPan ?? 0,
         holdOrbit: Boolean(limits?.walk?.holdOrbit),
         edge: limits?.edge ?? 'normal',
+        edgeTightness: !limits?.edge || limits.edge === 'off' ? 'normal' : limits.edge,
         marks,
         pan: orbit?.pan === false ? 'locked' : Array.isArray(orbit?.pan) ? 'box' : 'free',
         panBox: Array.isArray(orbit?.pan) ? orbit.pan : null,
@@ -853,7 +881,9 @@ if (!folder) {
             draft.modes ??= draft.mode ? [draft.mode] : [...MODES];
             draft.orbitTarget ??= null;
             draft.edge ??= 'normal';
-            draft.collision ??= { orbit: false, fly: true };
+            draft.edgeTightness ??= draft.edge === 'off' ? 'normal' : draft.edge;
+            draft.orbitNudge ??= 0;
+            draft.collision ??= { orbit: true, fly: true };
             draft.holdOrbit ??= false;
             setStatus('Continuing your unsaved draft from last time.');
         } else {

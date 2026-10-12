@@ -156,6 +156,11 @@
                 transition: opacity 0.25s ease-out;
                 box-shadow: inset 0 0 90px 24px rgba(255, 255, 255, 0.28);
             }
+            /* The collision view is a tool for the editor, not for visitors. */
+            .sse-showCollisionRow,
+            .sse-showCollisionShortcut {
+                display: none !important;
+            }
             .gs-message {
                 position: fixed;
                 inset: 0;
@@ -379,6 +384,10 @@
                         renderer: params.has('webgl') ? 'webgl' : 'webgpu'
                     });
                     document.body.append(pills);
+                    // the collision view's keyboard shortcut still works; keep it off
+                    window.viewer.events.on('collisionOverlayEnabled:changed', (on) => {
+                        if (on) window.viewer.state.collisionOverlayEnabled = false;
+                    });
                     const edge = document.createElement('div');
                     edge.className = 'gs-edge';
                     document.body.append(edge);

@@ -90514,6 +90514,16 @@ const p = new Pose();
 const zero = new Vec3();
 // How close the camera may come to collision while panning or zooming.
 const CLEARANCE = 0.15;
+// A hit counts as a wall (or floor, or ceiling) when the surface carries on around it: of
+// points this far from the hit along the surface, at least WALL_SOLID of WALL_SAMPLES are
+// solid. Plants, lamps and chairs leave open space around them, so the camera passes through.
+const WALL_SPAN = 0.4;
+const WALL_SAMPLES = 8;
+const WALL_SOLID = 6;
+const t1 = new Vec3();
+const t2 = new Vec3();
+const n = new Vec3();
+const sample = new Vec3();
 const turn = new Quat();
 const camFrom = new Vec3();
 const camTo = new Vec3();
@@ -90561,7 +90571,9 @@ class OrbitController {
     }
     update(deltaTime, inputFrame, camera) {
         const move = inputFrame.deltas.move._value;
-        if (this._limits?.pan === false || this._limits?.target) {
+        const pinned = this._limits?.target;
+        const nudge = pinned ? (this._limits.targetPan ?? 0) : 0;
+        if (this._limits?.pan === false || (pinned && !nudge)) {
             // drop the sideways and up/down part of the move input; zoom (index 2) stays
             move[0] = 0;
             move[1] = 0;
@@ -90578,9 +90590,10 @@ class OrbitController {
         easedAngles.copy(engine._rootPose.angles);
         const easedZoom = engine._childPose.position.z;
         const pose = this.controller.update(inputFrame, deltaTime);
+        const nudged = nudge > 0 && this._nudgeAroundTarget(prevRoot, nudge, input, deltaTime);
         const held = this.barriers && this._holdAtBarriers(prevRoot, prevZoom, prevAngles);
         const softened = this.barriers?.edge && this._softEdge(prevRoot, prevZoom, prevAngles, input, deltaTime);
-        if (held || softened) {
+        if (nudged || held || softened) {
             // the engine already eased toward the targets before they were held: redo this
             // frame's easing toward the held ones, or the view would creep past the barrier
             engine._rootPose.position.copy(easedFocus);
@@ -90617,7 +90630,12 @@ class OrbitController {
         root.pitchRange.set(limits?.pitch?.[0] ?? -90, limits?.pitch?.[1] ?? 90);
         root.yawRange.set(limits?.yaw?.[0] ?? -Infinity, limits?.yaw?.[1] ?? Infinity);
         const t = limits?.target;
-        const box = t ? [t[0], t[1], t[2], t[0], t[1], t[2]] : Array.isArray(limits?.pan) ? limits.pan : null;
+        const r = t ? (limits.targetPan ?? 0) : 0;
+        const box = t
+            ? [t[0] - r, t[1] - r, t[2] - r, t[0] + r, t[1] + r, t[2] + r]
+            : Array.isArray(limits?.pan)
+                ? limits.pan
+                : null;
         root.xRange.set(box?.[0] ?? -Infinity, box?.[3] ?? Infinity);
         root.yRange.set(box?.[1] ?? -Infinity, box?.[4] ?? Infinity);
         root.zRange.set(box?.[2] ?? -Infinity, box?.[5] ?? Infinity);
@@ -90708,6 +90726,26 @@ class OrbitController {
         }
         return true;
     }
+    /**
+     * Around a fixed orbit point, panning is a nudge: away from the point it meets growing
+     * resistance (never past `reach`), and let go, the focus eases back to the point.
+     */
+    _nudgeAroundTarget(prevFocus, reach, input, dt) {
+        const root = this._root();
+        const [tx, ty, tz] = this._limits.target;
+        home$1.set(tx, ty, tz);
+        const before = prevFocus.distance(home$1);
+        const after = root.position.distance(home$1);
+        if (after > before + 1e-6) {
+            root.position.lerp(prevFocus, root.position, resistance(before, reach));
+            return true;
+        }
+        if (input || before < 1e-4) {
+            return false;
+        }
+        root.position.copy(prevFocus).lerp(prevFocus, home$1, Math.min(1, SPRING_RATE * dt));
+        return true;
+    }
     _blocked(from, to) {
         const { walls, fence } = this.barriers;
         if (fence && !fencePoint(fence, probe.copy(from)) && fencePoint(fence, probe.copy(to))) {
@@ -90724,10 +90762,39 @@ class OrbitController {
             const length = Math.hypot(dx, dy, dz);
             // a camera already inside something may always move (out of it)
             if (length > 1e-6 && !collision.querySphere(from.x, from.y, from.z, 0.02, push)) {
-                if (collision.queryRay(from.x, from.y, from.z, dx / length, dy / length, dz / length, length + CLEARANCE)) {
+                const hit = collision.queryRay(from.x, from.y, from.z, dx / length, dy / length, dz / length, length + CLEARANCE);
+                if (hit && this._wallAt(collision, hit, dx / length, dy / length, dz / length)) {
                     return true;
                 }
             }
+        }
+        return false;
+    }
+    /** Whether a hit is on a wall-like surface rather than a small thing (see WALL_SPAN). */
+    _wallAt(collision, hit, dx, dy, dz) {
+        const normal = collision.querySurfaceNormal(hit.x, hit.y, hit.z, dx, dy, dz);
+        n.set(normal.nx, normal.ny, normal.nz);
+        if (n.lengthSq() < 1e-9)
+            n.set(-dx, -dy, -dz);
+        n.normalize();
+        t1.cross(n, Math.abs(n.y) < 0.9 ? Vec3.UP : Vec3.RIGHT).normalize();
+        t2.cross(n, t1);
+        let solid = 0;
+        for (let k = 0; k < WALL_SAMPLES; k++) {
+            const a = (k / WALL_SAMPLES) * Math.PI * 2;
+            sample
+                .set(hit.x, hit.y, hit.z)
+                .add(t1.clone().mulScalar(Math.cos(a) * WALL_SPAN))
+                .add(t2.clone().mulScalar(Math.sin(a) * WALL_SPAN));
+            // just in front of and just behind the surface: either way round the normal points
+            const inFront = collision.querySphere(sample.x + n.x * 0.03, sample.y + n.y * 0.03, sample.z + n.z * 0.03, 0.05, push);
+            const behind = collision.querySphere(sample.x - n.x * 0.03, sample.y - n.y * 0.03, sample.z - n.z * 0.03, 0.05, push);
+            if (inFront || behind)
+                solid++;
+            if (solid >= WALL_SOLID)
+                return true;
+            if (solid + (WALL_SAMPLES - 1 - k) < WALL_SOLID)
+                return false;
         }
         return false;
     }
@@ -91462,7 +91529,8 @@ class CameraManager {
                 fence: orbitWalls ? controllers.walk.fence : null
             };
         }
-        const orbitCollides = Boolean(limits?.collision?.orbit);
+        // the orbit camera stops at walls and floors but passes through small things
+        const orbitCollides = limits?.collision?.orbit !== false;
         const flyCollides = limits?.collision?.fly !== false;
         controllers.walk.setBodyHeight(global.visitorHeight ?? null);
         events.on('visitorHeight:changed', (height) => controllers.walk.setBodyHeight(height));
@@ -91728,7 +91796,7 @@ class CameraManager {
                 sceneOrbitLimits();
                 return;
             }
-            const { target: _target, ...scene } = limits.orbit ?? {};
+            const { target: _target, targetPan: _targetPan, ...scene } = limits.orbit ?? {};
             controllers.orbit.setLimits({
                 ...scene,
                 distance: [

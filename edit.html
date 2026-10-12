@@ -35,21 +35,29 @@
                         <button class="quiet" id="clear-orbit-point">Clear</button>
                     </div>
                     <output id="out-orbit-point"></output>
+                    <div class="row" id="nudge-row">
+                        <label for="orbit-nudge">Panning around the point</label>
+                        <select id="orbit-nudge">
+                            <option value="0">Locked</option>
+                            <option value="0.3">A little (30 cm)</option>
+                            <option value="1">More (1 m)</option>
+                        </select>
+                    </div>
+                    <p class="hint" id="nudge-hint">Visitors can nudge the view off the point; it eases back when they let go.</p>
                 </div>
             </section>
-            <section id="edge-tools">
-                <h2>Scene edge</h2>
-                <div class="segmented" role="radiogroup" aria-label="Scene edge">
-                    <label><input type="radio" name="edge" value="off" /> Off</label>
-                    <label><input type="radio" name="edge" value="loose" /> Loose</label>
-                    <label><input type="radio" name="edge" value="normal" /> Normal</label>
-                    <label><input type="radio" name="edge" value="tight" /> Tight</label>
-                </div>
+            <section id="bounds">
+                <h2>Boundaries</h2>
+                <label class="check"><input type="checkbox" id="stop-walls" /> Stop at walls</label>
                 <p class="hint">
-                    Found from the splat itself: the floor plan of the captured space, between its
-                    floor and ceiling, leaving stray floaters out. Visitors who push past it meet a soft
-                    resistance and ease back in when they let go. Tight follows the capture closely;
-                    changing it shows the edge for a moment.
+                    The camera stops at walls, floors and ceilings, and passes through small things
+                    like plants and chairs. Walking always stops at everything.
+                </p>
+                <label class="check"><input type="checkbox" id="stay-in" /> Stay within the scene</label>
+                <p class="hint">
+                    Catches what slips past the walls: open doors and windows, uncaptured gaps, open
+                    scenes. The edge is found from the splat; visitors who push past it meet a soft
+                    resistance and ease back in.
                 </p>
                 <output id="out-edge"></output>
             </section>
@@ -100,10 +108,17 @@
                     <p class="hint" id="mode-hint"></p>
                 </section>
                 <section>
-                    <h2>Bumps into the scene</h2>
-                    <p class="hint">Walking always does. The others float, so small things like plants do not get in the way.</p>
-                    <label class="check"><input type="checkbox" id="collide-orbit" /> Orbit camera</label>
-                    <label class="check"><input type="checkbox" id="collide-fly" /> Flying</label>
+                    <h2>Scene edge</h2>
+                    <div class="segmented" role="radiogroup" aria-label="How closely the scene edge follows the capture">
+                        <label><input type="radio" name="edge" value="loose" /> Loose</label>
+                        <label><input type="radio" name="edge" value="normal" /> Normal</label>
+                        <label><input type="radio" name="edge" value="tight" /> Tight</label>
+                    </div>
+                    <p class="hint">How closely the edge follows the capture. Loosen it if it cuts off real space; changing it shows the edge for a moment.</p>
+                </section>
+                <section>
+                    <h2>Flying</h2>
+                    <label class="check"><input type="checkbox" id="collide-fly" /> Flying bumps into the scene</label>
                 </section>
                 <section id="walk-tools">
                     <h2>Walls</h2>
@@ -140,7 +155,8 @@
                         <button data-mark="far">Furthest here</button>
                         <output id="out-distance"></output>
                     </div>
-                    <div class="row">
+                    <p class="hint" id="pan-pinned">Panning is set with the orbit point, under Scene type.</p>
+                    <div class="row" id="pan-row">
                         <label for="pan">Panning</label>
                         <select id="pan">
                             <option value="free">Free</option>
