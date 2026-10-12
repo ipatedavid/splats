@@ -1,4 +1,28 @@
 {
   "mode": "orbit",
-  "orbit": {}
+  "orbit": {
+    "target": [
+      -0.59,
+      1.609,
+      -0.05
+    ],
+    "yaw": [
+      -93.2,
+      83.2
+    ],
+    "pitch": [
+      -17.9,
+      42.7
+    ],
+    "distance": [
+      0.996,
+      2.318
+    ]
+  },
+  "preset": "object",
+  "collision": {
+    "orbit": false,
+    "fly": true
+  },
+  "edge": "loose"
 }
