@@ -181,6 +181,24 @@ const restartViewer = async () => {
     });
     window.viewer = viewer;
     drawWalls();
+    // the collision view: the viewer offers it once the collision data is in (and on WebGPU)
+    const showCollision = () => {
+        const available = Boolean(viewer?.state.hasCollisionOverlay);
+        $('#show-collision').disabled = !available;
+        $('#show-collision').checked = available && Boolean(draft.showCollision);
+        if (available) viewer.state.collisionOverlayEnabled = Boolean(draft.showCollision);
+        $('#collision-note').textContent = available
+            ? ''
+            : scene.collisionUrl
+              ? 'The collision view appears once the collision data has loaded. It needs a browser running WebGPU (recent Chrome or Edge).'
+              : 'This scene has no collision yet: make it in SuperSplat Studio and publish it with the scene.';
+        $('#collision-note').hidden = available;
+    };
+    viewer.events.on('hasCollisionOverlay:changed', showCollision);
+    viewer.events.on('collisionOverlayEnabled:changed', (on) => {
+        $('#show-collision').checked = on;
+    });
+    showCollision();
     // the edge is found from the splat, so its size shows once that has loaded
     viewer.events.on('loaded:changed', (loaded) => loaded && setTimeout(() => ($('#out-edge').textContent = describeEdge()), 1500));
     // Skip the intro animation: it would swallow the first button press, and dragging during it
@@ -585,6 +603,11 @@ const wire = () => {
         saveDraft();
         render();
         previewEdge();
+    });
+    $('#show-collision').addEventListener('change', () => {
+        draft.showCollision = $('#show-collision').checked;
+        saveDraft();
+        if (viewer?.state.hasCollisionOverlay) viewer.state.collisionOverlayEnabled = draft.showCollision;
     });
     $('#stop-walls').addEventListener('change', () => {
         draft.collision = { ...draft.collision, orbit: $('#stop-walls').checked };
