@@ -10,6 +10,12 @@
   ],
   "scenes": [
     {
+      "scene": "artists-workshop",
+      "title": "Artists workshop",
+      "place": "Mandaluyong",
+      "date": "October 2026"
+    },
+    {
       "scene": "jonathan-dangue",
       "title": "Jonathan Dangue",
       "date": "October 2026"
