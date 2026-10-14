@@ -1,0 +1,110 @@
+{
+ "version": 2,
+ "tonemapping": "none",
+ "highPrecisionRendering": false,
+ "background": {
+  "color": [
+   0,
+   0,
+   0
+  ]
+ },
+ "postEffectSettings": {
+  "sharpness": {
+   "enabled": false,
+   "amount": 0
+  },
+  "bloom": {
+   "enabled": false,
+   "intensity": 0.1,
+   "blurLevel": 2
+  },
+  "grading": {
+   "enabled": false,
+   "brightness": 1,
+   "contrast": 1,
+   "saturation": 1,
+   "tint": [
+    1,
+    1,
+    1
+   ]
+  },
+  "vignette": {
+   "enabled": false,
+   "intensity": 0.5,
+   "inner": 0.3,
+   "outer": 0.75,
+   "curvature": 1
+  },
+  "fringing": {
+   "enabled": false,
+   "intensity": 0.5
+  }
+ },
+ "animTracks": [
+  {
+   "name": "animTrack",
+   "duration": 10,
+   "frameRate": 30,
+   "loopMode": "repeat",
+   "interpolation": "spline",
+   "smoothness": 1,
+   "keyframes": {
+    "times": [
+     13,
+     124,
+     229
+    ],
+    "values": {
+     "position": [
+      3.950676679611206,
+      0.6250761151313782,
+      5.195156574249268,
+      -0.20842090249061584,
+      1.0091253519058228,
+      -3.496501922607422,
+      1.8650494813919067,
+      0.3582092523574829,
+      3.9843873977661133
+     ],
+     "target": [
+      -1.4156093194499686,
+      1.0934609632259424,
+      2.129969129750503,
+      -1.8230583263664137,
+      0.590305443642366,
+      1.7980990496984317,
+      -1.6879697443595347,
+      1.0834574449547234,
+      1.7887595041637994
+     ],
+     "fov": [
+      85,
+      85,
+      85
+     ]
+    }
+   }
+  }
+ ],
+ "cameras": [
+  {
+   "initial": {
+    "position": [
+     2.2879867553710938,
+     1.2574447393417358,
+     6.100001811981201
+    ],
+    "target": [
+     -1.1170538028875066,
+     0.6764818277616342,
+     1.9309618024957762
+    ],
+    "fov": 85
+   }
+  }
+ ],
+ "annotations": [],
+ "startMode": "animTrack"
+}
