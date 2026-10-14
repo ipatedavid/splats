@@ -1,5 +1,6 @@
 {
   "content": "https://d28zzqy0iyovbz.cloudfront.net/096f39e8/v1/lod-meta.json",
   "source": "https://superspl.at/scene/096f39e8",
-  "poster": "https://s3-eu-west-1.amazonaws.com/images.playcanvas.com/splat/096f39e8/v1/xl.webp"
+  "poster": "https://s3-eu-west-1.amazonaws.com/images.playcanvas.com/splat/096f39e8/v1/xl.webp",
+  "collision": "https://d28zzqy0iyovbz.cloudfront.net/096f39e8/v1/scene.voxel.json"
 }
