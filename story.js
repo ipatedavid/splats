@@ -121,15 +121,20 @@ export const bindScroll = (viewer, sections, { ease = 5 } = {}) => {
     let ready = false;
     let frame = 0;
     let before = performance.now();
+    // Each seek makes the viewer draw a whole frame, so it only seeks when the time has moved:
+    // seeking every frame kept the GPU drawing the splat nonstop, even with the camera at rest
+    // or the page scrolled past it, and starved the page's own scrolling.
+    let seeked = NaN;
     const tick = (now) => {
         const dt = Math.min(0.1, (now - before) / 1000);
         before = now;
         const wanted = Math.min(storyTime(centres, times), last);
         shown += (wanted - shown) * (1 - Math.exp(-dt * ease));
         if (Math.abs(wanted - shown) < 1e-4) shown = wanted;
-        if (ready) {
+        if (ready && shown !== seeked) {
             try {
                 viewer.seek(shown);
+                seeked = shown;
             } catch {
                 ready = false; // not loaded after all; wait for it
             }
@@ -138,6 +143,7 @@ export const bindScroll = (viewer, sections, { ease = 5 } = {}) => {
     };
     const onLoaded = (loaded) => {
         ready = Boolean(loaded);
+        seeked = NaN;
     };
     viewer.events.on('loaded:changed', onLoaded);
     ready = Boolean(viewer.state.loaded);
