@@ -102,6 +102,39 @@ const heroSteps = (keyframes) =>
         return step;
     });
 
+// Visitors who turned on their browser's data saver get the story over the scene's picture
+// instead of a live splat of tens of MB.
+const lite = Boolean(navigator.connection?.saveData);
+
+// The hero's splat renders at one pixel per CSS pixel on high-density screens: on a soft splat
+// the difference doesn't show, and it is a quarter of the work on a 2x screen. The viewer sizes
+// its canvas from its container, so the container is made smaller and scaled back up.
+// Desktops and laptops only: on phones the viewer already renders at reduced resolution.
+const renderAtOneX = (box) => {
+    const k = Math.min(window.devicePixelRatio || 1, 2);
+    if (k < 1.25 || !matchMedia('(pointer: fine)').matches) return;
+    Object.assign(box.style, {
+        inset: 'auto',
+        left: '0',
+        top: '0',
+        width: `${100 / k}%`,
+        height: `${100 / k}%`,
+        transform: `scale(${k})`,
+        transformOrigin: '0 0'
+    });
+};
+
+// Resolves on the visitor's first sign of moving on: a scroll, wheel, touch or key.
+const firstMove = () =>
+    new Promise((resolve) => {
+        const kinds = ['scroll', 'wheel', 'touchstart', 'keydown'];
+        const done = () => {
+            kinds.forEach((k) => removeEventListener(k, done));
+            resolve();
+        };
+        kinds.forEach((k) => addEventListener(k, done, { passive: true }));
+    });
+
 const startHero = async (info) => {
     const { entry, folder, settings, keyframes } = info;
     const steps = heroSteps(keyframes);
@@ -118,8 +151,17 @@ const startHero = async (info) => {
     $('#hero-credit').hidden = false;
     const poster = posterCandidates(info)[0];
     if (poster) $('#hero-poster').style.backgroundImage = `url("${poster}")`;
+    if (lite) {
+        $('#hero-poster').classList.add('drift');
+        return;
+    }
 
-    // the viewer is big: the words and pictures come first, the splat after
+    // Only one of the video and the splat works at a time: the video plays alone on the first
+    // screen, and the splat starts loading once the visitor starts to move on (the story is a
+    // screen's scroll away; the scene's picture stands in until it is ready). With a video
+    // the visitor's first move is waited for; without one the splat loads straight away.
+    if (!$('#hero-video').hidden) await firstMove();
+    renderAtOneX($('#hero-canvas'));
     const [{ createViewer, defaultSettings }, { loadScene }, { storySettings, bindScroll }] = await Promise.all([
         import('./index.js'),
         import('./scene.js'),
@@ -147,15 +189,24 @@ const startHero = async (info) => {
 // A showreel over the hero's first screen, dissolving into the scroll story as the opening
 // lines scroll away. portfolio.json's "heroVideo" names the files' common start, e.g.
 // "media/hero" for media/hero-1440-av1.mp4 (AV1, for browsers that play it),
-// media/hero-1080.mp4 (H.264, for the rest), media/hero-720.mp4 (phones) and
-// media/hero-poster.webp (shown until the video plays).
+// media/hero-1080.mp4 (H.264, for the rest), media/hero-portrait.mp4 (a 9:16 crop for
+// phones; hero-720.mp4 before that) and media/hero-poster.webp (shown until the video plays).
 const startVideo = (base) => {
     const video = $('#hero-video');
     const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
     const phone = matchMedia('(max-width: 760px)').matches;
     const av1 = video.canPlayType('video/mp4; codecs="av01.0.08M.08"') === 'probably';
     video.poster = `${base}-poster.webp`;
-    video.src = `${base}-${phone ? '720' : av1 ? '1440-av1' : '1080'}.mp4`;
+    // best first; a file that's missing or won't play falls through to the next
+    const files = phone ? ['portrait', '720', '1080'] : av1 ? ['1440-av1', '1080'] : ['1080'];
+    video.addEventListener('error', () => {
+        files.shift();
+        if (files.length) {
+            video.src = `${base}-${files[0]}.mp4`;
+            if (!still) video.play().catch(() => {});
+        }
+    });
+    video.src = `${base}-${files[0]}.mp4`;
     video.hidden = false;
     if (!still) video.play().catch(() => {});
 
@@ -170,9 +221,10 @@ const startVideo = (base) => {
         // the scene's name and link belong to the splat, so they come in as the video goes
         credit.style.opacity = String(1 - opacity);
         credit.inert = opacity > 0.5;
-        // no decoding behind the splat: pause while hidden, play again on the way back
-        if (opacity === 0 && !video.paused) video.pause();
-        else if (opacity > 0 && video.paused && !still) video.play().catch(() => {});
+        // Only one of the two at work: the video freezes on its frame as soon as it starts to
+        // dissolve into the splat, and plays again once it fills the screen.
+        if (opacity < 1 && !video.paused) video.pause();
+        else if (opacity === 1 && video.paused && !still) video.play().catch(() => {});
     };
     addEventListener('scroll', fade, { passive: true });
     fade();

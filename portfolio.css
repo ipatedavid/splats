@@ -11,7 +11,9 @@
     --accent: #b5532f;
     --night: #0e0d0c;
     --on-night: #f5f1ea;
-    --on-night-muted: rgba(245, 241, 234, 0.74);
+    --on-night-muted: rgba(245, 241, 234, 0.88);
+    /* lifts words off a moving picture: a tight edge plus a wide soft glow */
+    --lift: 0 1px 2px rgba(8, 7, 6, 0.4), 0 2px 18px rgba(8, 7, 6, 0.38), 0 8px 48px rgba(8, 7, 6, 0.3);
     --serif: 'Instrument Serif', 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
     --sans: 'Hanken Grotesk', 'Helvetica Neue', Arial, system-ui, sans-serif;
     --gutter: clamp(16px, 5vw, 72px);
@@ -130,12 +132,34 @@ em {
 .hero-poster.gone {
     opacity: 0;
 }
+/* the still that stands in for the splat on phones drifts slowly, so it doesn't look frozen */
+.hero-poster.drift {
+    animation: drift 24s ease-in-out infinite alternate;
+}
+@keyframes drift {
+    from {
+        transform: scale(1.02) translate(0, 0);
+    }
+    to {
+        transform: scale(1.12) translate(-2%, -1%);
+    }
+}
 .hero-shade {
     position: absolute;
     inset: 0;
     background: linear-gradient(180deg, rgba(10, 9, 8, 0.45), rgba(10, 9, 8, 0) 18%),
-        linear-gradient(90deg, rgba(10, 9, 8, 0.6), rgba(10, 9, 8, 0) 60%),
-        linear-gradient(0deg, rgba(10, 9, 8, 0.5), rgba(10, 9, 8, 0) 40%);
+        linear-gradient(90deg, rgba(10, 9, 8, 0.68), rgba(10, 9, 8, 0.12) 55%, rgba(10, 9, 8, 0) 75%),
+        linear-gradient(0deg, rgba(10, 9, 8, 0.55), rgba(10, 9, 8, 0) 45%);
+}
+.hero .display,
+.hero .lede,
+.hero .count,
+.step h2,
+.step p.caption,
+.hero-credit,
+.scroll-cue,
+.nav:not(.on-paper) {
+    text-shadow: var(--lift);
 }
 .hero-steps {
     position: relative;
@@ -175,7 +199,8 @@ em {
 }
 .lede {
     margin: 0;
-    font-size: clamp(1rem, 1.5vw, 1.2rem);
+    font-weight: 500;
+    font-size: clamp(1.05rem, 1.5vw, 1.25rem);
     color: var(--on-night-muted);
     max-width: 30rem;
 }
@@ -194,7 +219,8 @@ em {
 }
 .step p.caption {
     margin: 0;
-    font-size: clamp(1rem, 1.4vw, 1.15rem);
+    font-weight: 500;
+    font-size: clamp(1.05rem, 1.4vw, 1.2rem);
     color: var(--on-night-muted);
     max-width: 26rem;
 }
@@ -493,5 +519,8 @@ em {
     }
     .frame img {
         transition: none;
+    }
+    .hero-poster.drift {
+        animation: none;
     }
 }
