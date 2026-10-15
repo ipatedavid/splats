@@ -1,6 +1,5 @@
 {
-  "content": "https://d28zzqy0iyovbz.cloudfront.net/4079414a/v1/lod-meta.json",
+  "content": "https://media.formaspatial.com/scenes/artists-workshop/v1/lod-meta.json",
   "source": "https://superspl.at/scene/4079414a",
-  "poster": "https://s3-eu-west-1.amazonaws.com/images.playcanvas.com/splat/4079414a/v1/xl.webp",
-  "collision": "https://d28zzqy0iyovbz.cloudfront.net/4079414a/v1/scene.voxel.json"
+  "collision": "https://media.formaspatial.com/scenes/artists-workshop/v1/scene.voxel.json"
 }
