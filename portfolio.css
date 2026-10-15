@@ -126,11 +126,31 @@ em {
     object-fit: cover;
     background: var(--night);
 }
-/* the dark the video dissolves into, held through the interlude while the splat loads */
+/* the dark the video dissolves into, held through the making-of while the splat loads */
 .hero-veil {
     position: absolute;
     inset: 0;
     background: radial-gradient(ellipse at 50% 45%, #1b1815, var(--night) 70%);
+}
+/* the making-of's last frame: the story's first view, which opens up into the live splat */
+.hero-render {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    opacity: 0;
+}
+.hero-render img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform-origin: 0 0;
+    will-change: transform, clip-path;
+    transition: opacity 0.8s ease;
+}
+.hero-render.handed img {
+    opacity: 0;
 }
 .hero-poster {
     background: center / cover no-repeat;
@@ -160,8 +180,7 @@ em {
 }
 .hero .display,
 .hero .lede,
-.statement,
-.tally,
+.frame-label,
 .hero .count,
 .step h2,
 .step p.caption,
@@ -169,58 +188,91 @@ em {
 .nav:not(.on-paper) {
     text-shadow: var(--lift);
 }
-/* the interlude: a statement and the scene's size, on dark, while the splat loads */
-.step.interlude {
-    min-height: 160vh;
-    min-height: 160svh;
-    align-items: flex-start;
-    justify-content: center;
-    text-align: center;
+/* the making-of: three frames pinned in the window while the section scrolls by */
+.step.making {
+    display: block;
+    min-height: 0;
+    height: 300vh;
+    height: 300svh;
+    padding: 0;
 }
-/* pinned in the middle of the window while the section scrolls by */
-.interlude .step-inner {
+.making-pin {
     position: sticky;
     top: 0;
     height: 100vh;
     height: 100svh;
-    max-width: 58rem;
     display: flex;
-    flex-direction: column;
-    justify-content: center;
+    align-items: center;
+    overflow: hidden;
 }
-.statement {
-    font: 400 clamp(2.5rem, 6vw, 5.8rem) / 1 var(--serif);
-    letter-spacing: -0.018em;
+.frames {
+    --cw: min(25vw, 44vh);
+    position: relative;
+    width: 100%;
+    list-style: none;
     margin: 0;
-    text-wrap: balance;
-}
-.statement em {
-    display: block;
-    color: #e08b62;
-}
-.tally {
-    margin: clamp(36px, 6vh, 64px) 0 0;
+    padding: 0 var(--gutter);
     display: grid;
-    justify-items: center;
-    gap: 6px;
+    grid-template-columns: repeat(3, var(--cw));
+    justify-content: center;
+    gap: clamp(20px, 3vw, 52px);
 }
-.tally-number {
-    font: 500 clamp(1.6rem, 2.8vw, 2.4rem) / 1 var(--sans);
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 0.01em;
+.frames li {
+    position: relative;
 }
-.tally-label {
+.shot {
+    position: relative;
+    aspect-ratio: 3 / 4;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #1b1815;
+}
+.shot img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0;
+}
+.shot img.on,
+.shot img:only-child {
+    opacity: 1;
+}
+/* the render shows through here: it lives behind, in the stage, so it can open to fill it */
+.shot.window {
+    background: none;
+}
+.frame-label {
+    display: grid;
+    gap: 4px;
+    margin-top: 20px;
+}
+.frame-label .num {
     font-size: 13px;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--on-night-muted);
+    font-variant-numeric: tabular-nums;
+}
+.frame-label h3 {
+    font: 400 clamp(1.9rem, 2.8vw, 2.6rem) / 1 var(--serif);
+    margin: 0;
+}
+.frame-label p {
+    margin: 0;
+    font-size: 15px;
     color: var(--on-night-muted);
 }
 .load-line {
-    width: min(280px, 60vw);
+    width: 100%;
     height: 2px;
-    margin-top: 18px;
+    margin-top: 14px;
     background: rgba(245, 241, 234, 0.18);
     overflow: hidden;
+    transition: opacity 0.6s ease 0.4s;
+}
+.load-line.done {
+    opacity: 0;
 }
 .load-line span {
     display: block;
@@ -567,6 +619,18 @@ em {
     }
     .cards li:first-child .frame {
         aspect-ratio: 4 / 3;
+    }
+    /* one frame at a time, the strip sliding along as the page scrolls */
+    .frames {
+        --cw: min(72vw, 52svh);
+        display: flex;
+        justify-content: flex-start;
+        gap: 8vw;
+        padding: 0 calc((100% - var(--cw)) / 2);
+    }
+    .frames li {
+        flex: none;
+        width: var(--cw);
     }
     .steps-list {
         grid-template-columns: 1fr;

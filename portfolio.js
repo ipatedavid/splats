@@ -39,11 +39,13 @@ const fetchJson = async (url) => {
 // Where things are on the page, measured once and again whenever sizes change. Scrolling then
 // only does arithmetic: measuring during a scroll makes the browser redo its layout each time.
 const geometry = new Map(); // element -> { top, height } in page coordinates
+const measureTasks = []; // other measurements, taken at the same moments
 const measure = () => {
     for (const node of geometry.keys()) {
         const box = node.getBoundingClientRect();
         geometry.set(node, { top: box.top + scrollY, height: box.height });
     }
+    for (const task of measureTasks) task();
     runScroll();
 };
 const sizes = new ResizeObserver(() => measure());
@@ -188,35 +190,77 @@ const playedFor = (video, ms) =>
         else video.addEventListener('playing', start, { once: true });
     });
 
-// ---- the interlude ------------------------------------------------------------------------
+// ---- the making-of -------------------------------------------------------------------------
 
 const smooth01 = (x) => {
     const t = Math.min(1, Math.max(0, x));
     return t * t * (3 - 2 * t);
 };
+const lerp = (a, b, t) => a + (b - a) * t;
 
-// Between the opening screen and the story: a statement on dark, and the scene's size counting
-// up as its splat downloads. The scroll it takes is the splat's loading time. The statement is
-// portfolio.json's "interlude"; its second sentence goes on its own line, in the accent colour.
-const interludeSection = (statement) => {
-    const step = el('section', 'step interlude');
+// Between the opening screen and the story, while the splat downloads: how the scene was made,
+// in three frames pinned in the window. A photograph from the shoot (flicking through several
+// as the page scrolls), the splat's points, and the finished render from the story's first
+// view. That last frame then opens to fill the window, and the live splat, at the same view,
+// takes over from it once loaded. portfolio.json's "process" names the folder holding the
+// pictures (photo-1.webp to photo-N.webp, points.webp, render.webp, the last two square, at
+// the first keyframe's pose and fov), how many photos, and the words under the frames;
+// "{count}" in them becomes the splat's size.
+const PROCESS_STEPS = [
+    { title: 'Capture', text: 'Hundreds of photographs, taken on site' },
+    { title: 'Reconstruct', text: '{count} points of light' },
+    { title: 'Explore', text: 'Every angle, live' }
+];
+
+const sizeInWords = (count) =>
+    !count ? 'Millions of' : count >= 1e6 ? `${(count / 1e6).toFixed(1)} million` : count.toLocaleString('en-US');
+
+const picture = (src) => {
+    const img = new Image();
+    img.alt = '';
+    img.decoding = 'async';
+    img.src = src;
+    return img;
+};
+
+const makingSection = (process, count) => {
+    const base = process.folder;
+    const photos = Array.from({ length: Math.max(1, Math.min(24, process.photos | 0)) }, (_, i) =>
+        picture(`${base}/photo-${i + 1}.webp`)
+    );
+    photos[0].className = 'on';
+    const step = el('section', 'step making');
     step.dataset.time = '0';
-    const inner = el('div', 'step-inner');
-    const h = el('h2', 'statement');
-    const cut = statement.indexOf('. ');
-    if (cut > 0) {
-        h.append(statement.slice(0, cut + 1), ' ', el('em', '', statement.slice(cut + 2)));
-    } else {
-        h.textContent = statement;
-    }
-    const tally = el('div', 'tally');
-    tally.append(el('span', 'tally-number', ''), el('span', 'tally-label', 'Loading the scene'));
+    const pin = el('div', 'making-pin');
+    const strip = el('ol', 'frames');
+    const items = [];
+    const shots = [];
+    const labels = [];
     const line = el('div', 'load-line');
     line.append(el('span'));
-    tally.append(line);
-    inner.append(h, tally);
-    step.append(inner);
-    return step;
+    PROCESS_STEPS.forEach((fallback, i) => {
+        const words = { ...fallback, ...(process.steps?.[i] ?? {}) };
+        const item = el('li');
+        const shot = el('div', i === 2 ? 'shot window' : 'shot');
+        if (i === 0) shot.append(...photos);
+        if (i === 1) shot.append(picture(`${base}/points.webp`));
+        const label = el('div', 'frame-label');
+        label.append(
+            el('span', 'num', String(i + 1).padStart(2, '0')),
+            el('h3', '', String(words.title ?? '')),
+            el('p', '', String(words.text ?? '').replace('{count}', sizeInWords(count)))
+        );
+        if (i === 2) label.append(line);
+        item.append(shot, label);
+        strip.append(item);
+        items.push(item);
+        shots.push(shot);
+        labels.push(label);
+    });
+    pin.append(strip);
+    step.append(pin);
+    $('#hero-render img').src = `${base}/render.webp`;
+    return { step, pin, strip, items, shots, labels, photos, line };
 };
 
 // The splat count of a scene published as SOG (its meta.json says), else null.
@@ -227,54 +271,106 @@ const splatCount = async (info) => {
     return Number.isFinite(meta?.count) ? meta.count : null;
 };
 
-// Drives the counter and the line: call with the share loaded, 0 to 1.
-const tallyUpdater = (section, count) => {
-    const number = section.querySelector('.tally-number');
-    const label = section.querySelector('.tally-label');
-    const line = section.querySelector('.load-line span');
-    if (count) label.textContent = 'points of light in this scene';
-    number.hidden = !count;
-    number.textContent = '0';
-    let share = 0;
-    let shown = 0;
-    let frame = 0;
-    const draw = () => {
-        const goal = (count ?? 0) * share;
-        shown += (goal - shown) * 0.08;
-        if (Math.abs(goal - shown) < 1) shown = goal;
-        number.textContent = Math.round(shown).toLocaleString('en-US');
-        frame = shown === goal ? 0 : requestAnimationFrame(draw);
-    };
-    return (value) => {
-        share = Math.max(share, Math.min(1, value));
-        line.style.transform = `scaleX(${share})`;
-        if (count && !frame) frame = requestAnimationFrame(draw);
-        if (share === 1 && !count) label.textContent = 'Ready';
+// Where a node sits inside `root`, leaving out transforms (which move things only on screen).
+const offsetIn = (node, root) => {
+    let x = 0;
+    let y = 0;
+    for (let n = node; n && n !== root; n = n.offsetParent) {
+        x += n.offsetLeft;
+        y += n.offsetTop;
+    }
+    return { x, y, w: node.offsetWidth, h: node.offsetHeight };
+};
+
+// The making-of's choreography, all from the scroll. Returns two calls: progress(share) for
+// the download line, and live() once the splat can take over from the render.
+const playMaking = (making, withVideo) => {
+    const { step, pin, strip, items, shots, labels, photos, line } = making;
+    const veil = $('#hero-veil');
+    const shade = $('.hero-shade');
+    const layer = $('#hero-render');
+    const render = layer.firstElementChild;
+    veil.hidden = false;
+    layer.hidden = false;
+    const section = track(step);
+    let frames = [];
+    let phone = false;
+    let stage = { w: 1, h: 1 };
+    measureTasks.push(() => {
+        phone = matchMedia('(max-width: 760px)').matches;
+        frames = shots.map((s) => offsetIn(s, pin));
+        stage = { w: layer.offsetWidth || innerWidth, h: layer.offsetHeight || innerHeight };
+    });
+    measure();
+    let ready = false;
+    let photo = 0;
+    scrollTasks.push((y, height) => {
+        const box = section();
+        const top = box.top - y; // the section's top in the window
+        const p = (y - box.top) / Math.max(1, box.height - height); // 0 as it pins, 1 as it lets go
+        const pinTop = top > 0 ? top : Math.min(0, top + box.height - height);
+        const enter = smooth01(1 - top / height); // 0 below the window, 1 at its top
+        const open = smooth01((p - 0.62) / 0.3); // the last frame opening to fill the window
+        const leave = 1 - smooth01((p - 0.54) / 0.12); // the rest making way for it
+
+        // the frames come in one after another (on phones, the strip slides along them)
+        const rise = items.map((_, i) => smooth01((p + 0.15 - (phone ? 0 : 0.1 * i)) / 0.15));
+        const pitch = frames.length > 1 ? frames[1].x - frames[0].x : 0;
+        const shift = phone ? -2 * pitch * smooth01((p - 0.02) / 0.5) : 0;
+        strip.style.transform = `translate3d(${shift}px, 0, 0)`;
+        items.forEach((item, i) => {
+            item.style.transform = `translate3d(0, ${(1 - rise[i]) * 30}px, 0)`;
+            labels[i].style.opacity = String(rise[i] * leave);
+            if (i < 2) shots[i].style.opacity = String(rise[i] * leave);
+        });
+        const next = Math.floor(Math.max(0, p + 0.2) * 26) % photos.length;
+        if (next !== photo) {
+            photos[photo].className = '';
+            photos[next].className = 'on';
+            photo = next;
+        }
+
+        // The render is one picture the size of the window, scaled down and clipped to the
+        // last frame, growing back to the whole window as it opens: at the end it is exactly
+        // the live splat's first view.
+        const f = frames[2];
+        if (f) {
+            const { w: W, h: H } = stage;
+            const card = { x: f.x + shift, y: f.y + pinTop + (1 - rise[2]) * 30, w: f.w, h: f.h };
+            const s = lerp(Math.max(card.w / W, card.h / H), 1, open);
+            const cx = lerp(card.x + card.w / 2, W / 2, open);
+            const cy = lerp(card.y + card.h / 2, H / 2, open);
+            const cw = lerp(card.w, W, open);
+            const ch = lerp(card.h, H, open);
+            const tx = cx - (s * W) / 2;
+            const ty = cy - (s * H) / 2;
+            const inset = [cy - ch / 2 - ty, W * s - (cx + cw / 2 - tx), H * s - (cy + ch / 2 - ty), cx - cw / 2 - tx];
+            render.style.transform = `translate3d(${tx}px, ${ty}px, 0) scale(${s})`;
+            render.style.clipPath = `inset(${inset.map((v) => `${Math.max(0, v / s)}px`).join(' ')} round ${(14 * (1 - open)) / s}px)`;
+        }
+        layer.style.opacity = String(rise[2]);
+        layer.classList.toggle('handed', ready && open >= 1);
+        // the dark stays until the render covers the window, so nothing shows around it
+        veil.style.opacity = open >= 1 ? '0' : String(withVideo ? 1 : enter);
+        shade.style.opacity = String(Math.max(1 - enter, open));
+    });
+    runScroll();
+    return {
+        progress: (share) => (line.firstElementChild.style.transform = `scaleX(${Math.min(1, share)})`),
+        live: () => {
+            ready = true;
+            line.classList.add('done');
+            runScroll();
+        }
     };
 };
 
-const startHero = async (info, statement) => {
+const startHero = async (info, process) => {
     const { entry, folder, settings, keyframes } = info;
     const steps = heroSteps(keyframes, entry);
-    const interlude = interludeSection(statement);
-    $('#hero-steps').append(interlude, ...steps);
-    const loaded = tallyUpdater(interlude, await splatCount(info));
-
-    // The veil: dark under the video (or coming in as the opening lines leave, without one),
-    // held through the interlude, lifting to show the splat for the first caption.
-    const veil = $('#hero-veil');
-    veil.hidden = false;
-    const withVideo = !$('#hero-video').hidden;
-    const intro = track($('#hero-steps .intro'));
-    const between = track(interlude);
-    scrollTasks.push((y, height) => {
-        const top = intro();
-        const comeIn = withVideo ? 1 : smooth01(((y - top.top) / top.height - 0.2) / 0.6);
-        const box = between();
-        const passed = (height - (box.top - y)) / (box.height + height); // 0 entering, 1 gone
-        veil.style.opacity = String(comeIn * (1 - smooth01((passed - 0.62) / 0.28)));
-    });
-    runScroll();
+    const making = process && makingSection(process, await splatCount(info));
+    $('#hero-steps').append(...(making ? [making.step] : []), ...steps);
+    const status = making ? playMaking(making, !$('#hero-video').hidden) : { progress() {}, live() {} };
     const sections = [...document.querySelectorAll('#hero-steps .step')];
     const shown = new IntersectionObserver(
         (entries) => entries.forEach((e) => e.target.classList.toggle('shown', e.isIntersecting)),
@@ -286,7 +382,7 @@ const startHero = async (info, statement) => {
     if (poster) $('#hero-poster').style.backgroundImage = `url("${poster}")`;
     if (lite) {
         $('#hero-poster').classList.add('drift');
-        loaded(1);
+        status.progress(1);
         return;
     }
 
@@ -320,10 +416,13 @@ const startHero = async (info, statement) => {
     viewer.events.on('loaded:changed', (ready) => {
         if (!ready) return;
         $('#hero-poster').classList.add('gone');
-        loaded(1);
+        status.progress(1);
+        // a moment for its first frames to settle before it takes over from the render
+        setTimeout(status.live, 400);
     });
-    viewer.events.on('progress:changed', (progress) => loaded(progress / 100));
-    loaded(viewer.state.loaded ? 1 : viewer.state.progress / 100);
+    viewer.events.on('progress:changed', (progress) => status.progress(progress / 100));
+    status.progress(viewer.state.progress / 100);
+    if (viewer.state.loaded) status.live();
     // with smooth scrolling the page already glides, so the camera follows it closely
     bindScroll(viewer, sections, { ease: smooth ? 14 : 6 });
 };
@@ -500,7 +599,8 @@ try {
 
     const hero = infos.find((i) => i.entry.scene === data.hero && i.keyframes.length) ?? infos.find((i) => i.keyframes.length);
     if (hero) {
-        await startHero(hero, data.interlude || 'Hundreds of photographs. Millions of points of light.');
+        const process = data.process && /^[\w./-]+$/.test(data.process.folder ?? '') ? data.process : null;
+        await startHero(hero, process);
     }
 } catch (error) {
     reveal();
