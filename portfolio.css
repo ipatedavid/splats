@@ -156,11 +156,12 @@ em {
     padding-bottom: clamp(96px, 16vh, 180px);
 }
 .intro .step-inner {
-    max-width: 62rem;
+    max-width: 64rem;
 }
+/* a full sentence: big, in about three lines */
 .display {
-    font: 400 clamp(3.4rem, 10vw, 9.5rem) / 0.92 var(--serif);
-    letter-spacing: -0.02em;
+    font: 400 clamp(2.7rem, 6.4vw, 6.6rem) / 0.98 var(--serif);
+    letter-spacing: -0.018em;
     margin: 0 0 20px;
     text-wrap: balance;
 }
