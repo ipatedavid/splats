@@ -90,14 +90,24 @@ const card = (info, index) => {
 
 // ---- the hero -----------------------------------------------------------------------------
 
-const heroSteps = (keyframes) =>
+// One section per keyframe: the scene's name and the count, the caption, and on the last one
+// a button into the free 3D player.
+const heroSteps = (keyframes, entry) =>
     keyframes.map((k, i) => {
         const step = el('section', 'step');
         step.dataset.time = String(i);
         const inner = el('div', 'step-inner');
-        inner.append(el('p', 'count', `${String(i + 1).padStart(2, '0')} / ${String(keyframes.length).padStart(2, '0')}`));
+        const count = `${String(i + 1).padStart(2, '0')} / ${String(keyframes.length).padStart(2, '0')}`;
+        inner.append(el('p', 'count', `${entry.title} · ${count}`));
         if (k.title) inner.append(el('h2', '', k.title));
         if (k.text) inner.append(el('p', 'caption', k.text));
+        if (i === keyframes.length - 1) {
+            const go = el('a', 'hero-pill', 'Explore it yourself');
+            go.href = `view.html?scene=${encodeURIComponent(entry.scene)}`;
+            go.append(el('span', '', ' →'));
+            go.lastChild.setAttribute('aria-hidden', 'true');
+            inner.append(go);
+        }
         step.append(inner);
         return step;
     });
@@ -137,7 +147,7 @@ const firstMove = () =>
 
 const startHero = async (info) => {
     const { entry, folder, settings, keyframes } = info;
-    const steps = heroSteps(keyframes);
+    const steps = heroSteps(keyframes, entry);
     $('#hero-steps').append(...steps);
     const sections = [...document.querySelectorAll('#hero-steps .step')];
     const shown = new IntersectionObserver(
@@ -146,9 +156,6 @@ const startHero = async (info) => {
     );
     sections.forEach((s) => shown.observe(s));
 
-    $('#hero-title').textContent = [entry.title, entry.place].filter(Boolean).join(' · ');
-    $('#hero-explore').href = `view.html?scene=${encodeURIComponent(entry.scene)}`;
-    $('#hero-credit').hidden = false;
     const poster = posterCandidates(info)[0];
     if (poster) $('#hero-poster').style.backgroundImage = `url("${poster}")`;
     if (lite) {
@@ -211,16 +218,12 @@ const startVideo = (base) => {
     if (!still) video.play().catch(() => {});
 
     const intro = $('#hero-steps .intro');
-    const credit = $('#hero-credit');
     const fade = () => {
         const box = intro.getBoundingClientRect();
         const gone = Math.min(1, Math.max(0, -box.top / box.height)); // 0 at the top, 1 once scrolled past
         const t = Math.min(1, Math.max(0, (gone - 0.2) / 0.6));
         const opacity = 1 - t * t * (3 - 2 * t);
         video.style.opacity = String(opacity);
-        // the scene's name and link belong to the splat, so they come in as the video goes
-        credit.style.opacity = String(1 - opacity);
-        credit.inert = opacity > 0.5;
         // Only one of the two at work: the video freezes on its frame as soon as it starts to
         // dissolve into the splat, and plays again once it fills the screen.
         if (opacity < 1 && !video.paused) video.pause();

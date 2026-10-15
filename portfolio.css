@@ -156,7 +156,6 @@ em {
 .hero .count,
 .step h2,
 .step p.caption,
-.hero-credit,
 .scroll-cue,
 .nav:not(.on-paper) {
     text-shadow: var(--lift);
@@ -208,6 +207,7 @@ em {
     margin: 0 0 16px;
     font-size: 13px;
     letter-spacing: 0.14em;
+    text-transform: uppercase;
     color: var(--on-night-muted);
     font-variant-numeric: tabular-nums;
 }
@@ -224,29 +224,26 @@ em {
     color: var(--on-night-muted);
     max-width: 26rem;
 }
-.hero-credit {
-    pointer-events: auto;
-    position: absolute;
-    left: var(--gutter);
-    right: var(--gutter);
-    bottom: 28px;
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 16px;
-    font-size: 14px;
-    color: var(--on-night-muted);
-    z-index: 2;
-}
-.hero-credit a {
-    color: var(--on-night);
+/* into the free 3D player, at the end of the story */
+.hero-pill {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 30px;
+    padding: 15px 28px;
+    border-radius: 999px;
+    background: var(--on-night);
+    color: var(--ink);
+    font-size: 17px;
+    font-weight: 500;
     text-decoration: none;
-    border-bottom: 1px solid rgba(245, 241, 234, 0.45);
-    padding-bottom: 2px;
+    box-shadow: 0 8px 30px rgba(8, 7, 6, 0.35);
+    transition: background 0.3s ease, transform 0.3s ease;
 }
-.hero-credit a:hover,
-.hero-credit a:focus-visible {
-    border-bottom-color: var(--on-night);
+.hero-pill:hover,
+.hero-pill:focus-visible {
+    background: #e08b62;
+    transform: translateY(-1px);
 }
 .scroll-cue {
     position: fixed;
@@ -503,11 +500,6 @@ em {
     }
     .steps-list {
         grid-template-columns: 1fr;
-    }
-    .hero-credit {
-        bottom: 64px;
-        flex-direction: column;
-        gap: 6px;
     }
 }
 @media (prefers-reduced-motion: reduce) {
