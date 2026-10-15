@@ -31,7 +31,6 @@
   ],
   "process": {
     "folder": "media/process",
-    "photos": 10,
     "steps": [
       {
         "title": "Capture",
