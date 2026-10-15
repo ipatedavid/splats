@@ -142,6 +142,42 @@ const startHero = async (info) => {
     bindScroll(viewer, sections, { ease: smooth ? 14 : 6 });
 };
 
+// ---- the hero video ------------------------------------------------------------------------
+
+// A showreel over the hero's first screen, dissolving into the scroll story as the opening
+// lines scroll away. portfolio.json's "heroVideo" names the files' common start, e.g.
+// "media/hero" for media/hero-1440-av1.mp4 (AV1, for browsers that play it),
+// media/hero-1080.mp4 (H.264, for the rest), media/hero-720.mp4 (phones) and
+// media/hero-poster.webp (shown until the video plays).
+const startVideo = (base) => {
+    const video = $('#hero-video');
+    const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const phone = matchMedia('(max-width: 760px)').matches;
+    const av1 = video.canPlayType('video/mp4; codecs="av01.0.08M.08"') === 'probably';
+    video.poster = `${base}-poster.webp`;
+    video.src = `${base}-${phone ? '720' : av1 ? '1440-av1' : '1080'}.mp4`;
+    video.hidden = false;
+    if (!still) video.play().catch(() => {});
+
+    const intro = $('#hero-steps .intro');
+    const credit = $('#hero-credit');
+    const fade = () => {
+        const box = intro.getBoundingClientRect();
+        const gone = Math.min(1, Math.max(0, -box.top / box.height)); // 0 at the top, 1 once scrolled past
+        const t = Math.min(1, Math.max(0, (gone - 0.2) / 0.6));
+        const opacity = 1 - t * t * (3 - 2 * t);
+        video.style.opacity = String(opacity);
+        // the scene's name and link belong to the splat, so they come in as the video goes
+        credit.style.opacity = String(1 - opacity);
+        credit.inert = opacity > 0.5;
+        // no decoding behind the splat: pause while hidden, play again on the way back
+        if (opacity === 0 && !video.paused) video.pause();
+        else if (opacity > 0 && video.paused && !still) video.play().catch(() => {});
+    };
+    addEventListener('scroll', fade, { passive: true });
+    fade();
+};
+
 // ---- the page -----------------------------------------------------------------------------
 
 const reveal = () => {
@@ -228,6 +264,9 @@ try {
         links.append(a);
     });
 
+    if (typeof data.heroVideo === 'string' && /^[\w./-]+$/.test(data.heroVideo)) {
+        startVideo(data.heroVideo);
+    }
     const entries = (data.scenes ?? []).filter((s) => s && SCENE_NAME.test(s.scene ?? '') && s.title);
     const infos = await Promise.all(entries.map(sceneInfo));
     $('#scenes').append(...infos.map(card));
