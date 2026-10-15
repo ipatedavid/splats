@@ -28,5 +28,23 @@
       "title": "Jonathan Dangue",
       "date": "October 2026"
     }
-  ]
+  ],
+  "process": {
+    "folder": "media/process",
+    "photos": 10,
+    "steps": [
+      {
+        "title": "Capture",
+        "text": "294 photographs, taken on site"
+      },
+      {
+        "title": "Reconstruct",
+        "text": "{count} points of light"
+      },
+      {
+        "title": "Explore",
+        "text": "Every angle, live"
+      }
+    ]
+  }
 }
