@@ -145,10 +145,93 @@ const firstMove = () =>
         kinds.forEach((k) => addEventListener(k, done, { passive: true }));
     });
 
-const startHero = async (info) => {
+// ---- the interlude ------------------------------------------------------------------------
+
+const smooth01 = (x) => {
+    const t = Math.min(1, Math.max(0, x));
+    return t * t * (3 - 2 * t);
+};
+
+// Between the opening screen and the story: a statement on dark, and the scene's size counting
+// up as its splat downloads. The scroll it takes is the splat's loading time. The statement is
+// portfolio.json's "interlude"; its second sentence goes on its own line, in the accent colour.
+const interludeSection = (statement) => {
+    const step = el('section', 'step interlude');
+    step.dataset.time = '0';
+    const inner = el('div', 'step-inner');
+    const h = el('h2', 'statement');
+    const cut = statement.indexOf('. ');
+    if (cut > 0) {
+        h.append(statement.slice(0, cut + 1), ' ', el('em', '', statement.slice(cut + 2)));
+    } else {
+        h.textContent = statement;
+    }
+    const tally = el('div', 'tally');
+    tally.append(el('span', 'tally-number', ''), el('span', 'tally-label', 'Loading the scene'));
+    const line = el('div', 'load-line');
+    line.append(el('span'));
+    tally.append(line);
+    inner.append(h, tally);
+    step.append(inner);
+    return step;
+};
+
+// The splat count of a scene published as SOG (its meta.json says), else null.
+const splatCount = async (info) => {
+    const content = safeLink(info.manifest?.content ?? '');
+    if (!content || !/\/meta\.json(\?|$)/.test(content)) return null;
+    const meta = await fetchJson(content);
+    return Number.isFinite(meta?.count) ? meta.count : null;
+};
+
+// Drives the counter and the line: call with the share loaded, 0 to 1.
+const tallyUpdater = (section, count) => {
+    const number = section.querySelector('.tally-number');
+    const label = section.querySelector('.tally-label');
+    const line = section.querySelector('.load-line span');
+    if (count) label.textContent = 'points of light in this scene';
+    number.hidden = !count;
+    number.textContent = '0';
+    let share = 0;
+    let shown = 0;
+    let frame = 0;
+    const draw = () => {
+        const goal = (count ?? 0) * share;
+        shown += (goal - shown) * 0.08;
+        if (Math.abs(goal - shown) < 1) shown = goal;
+        number.textContent = Math.round(shown).toLocaleString('en-US');
+        frame = shown === goal ? 0 : requestAnimationFrame(draw);
+    };
+    return (value) => {
+        share = Math.max(share, Math.min(1, value));
+        line.style.transform = `scaleX(${share})`;
+        if (count && !frame) frame = requestAnimationFrame(draw);
+        if (share === 1 && !count) label.textContent = 'Ready';
+    };
+};
+
+const startHero = async (info, statement) => {
     const { entry, folder, settings, keyframes } = info;
     const steps = heroSteps(keyframes, entry);
-    $('#hero-steps').append(...steps);
+    const interlude = interludeSection(statement);
+    $('#hero-steps').append(interlude, ...steps);
+    const loaded = tallyUpdater(interlude, await splatCount(info));
+
+    // The veil: dark under the video (or coming in as the opening lines leave, without one),
+    // held through the interlude, lifting to show the splat for the first caption.
+    const veil = $('#hero-veil');
+    veil.hidden = false;
+    const withVideo = !$('#hero-video').hidden;
+    const intro = $('#hero-steps .intro');
+    const fadeVeil = () => {
+        const top = intro.getBoundingClientRect();
+        const comeIn = withVideo ? 1 : smooth01((-top.top / top.height - 0.2) / 0.6);
+        const box = interlude.getBoundingClientRect();
+        const passed = (innerHeight - box.top) / (box.height + innerHeight); // 0 entering, 1 gone
+        veil.style.opacity = String(comeIn * (1 - smooth01((passed - 0.62) / 0.28)));
+    };
+    addEventListener('scroll', fadeVeil, { passive: true });
+    fadeVeil();
     const sections = [...document.querySelectorAll('#hero-steps .step')];
     const shown = new IntersectionObserver(
         (entries) => entries.forEach((e) => e.target.classList.toggle('shown', e.isIntersecting)),
@@ -160,6 +243,7 @@ const startHero = async (info) => {
     if (poster) $('#hero-poster').style.backgroundImage = `url("${poster}")`;
     if (lite) {
         $('#hero-poster').classList.add('drift');
+        loaded(1);
         return;
     }
 
@@ -186,7 +270,13 @@ const startHero = async (info) => {
         renderer: new URL(location.href).searchParams.has('webgl') ? 'webgl' : 'webgpu'
     });
     window.viewer = viewer;
-    viewer.events.on('loaded:changed', (loaded) => loaded && $('#hero-poster').classList.add('gone'));
+    viewer.events.on('loaded:changed', (ready) => {
+        if (!ready) return;
+        $('#hero-poster').classList.add('gone');
+        loaded(1);
+    });
+    viewer.events.on('progress:changed', (progress) => loaded(progress / 100));
+    loaded(viewer.state.loaded ? 1 : viewer.state.progress / 100);
     // with smooth scrolling the page already glides, so the camera follows it closely
     bindScroll(viewer, sections, { ease: smooth ? 14 : 6 });
 };
@@ -333,7 +423,7 @@ try {
 
     const hero = infos.find((i) => i.entry.scene === data.hero && i.keyframes.length) ?? infos.find((i) => i.keyframes.length);
     if (hero) {
-        await startHero(hero);
+        await startHero(hero, data.interlude || 'Hundreds of photographs. Millions of points of light.');
     }
 } catch (error) {
     reveal();

@@ -125,6 +125,12 @@ em {
     object-fit: cover;
     background: var(--night);
 }
+/* the dark the video dissolves into, held through the interlude while the splat loads */
+.hero-veil {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 50% 45%, #1b1815, var(--night) 70%);
+}
 .hero-poster {
     background: center / cover no-repeat;
     transition: opacity 1.4s ease;
@@ -153,12 +159,75 @@ em {
 }
 .hero .display,
 .hero .lede,
+.statement,
+.tally,
 .hero .count,
 .step h2,
 .step p.caption,
 .scroll-cue,
 .nav:not(.on-paper) {
     text-shadow: var(--lift);
+}
+/* the interlude: a statement and the scene's size, on dark, while the splat loads */
+.step.interlude {
+    min-height: 160vh;
+    min-height: 160svh;
+    align-items: flex-start;
+    justify-content: center;
+    text-align: center;
+}
+/* pinned in the middle of the window while the section scrolls by */
+.interlude .step-inner {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    height: 100svh;
+    max-width: 58rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.statement {
+    font: 400 clamp(2.5rem, 6vw, 5.8rem) / 1 var(--serif);
+    letter-spacing: -0.018em;
+    margin: 0;
+    text-wrap: balance;
+}
+.statement em {
+    display: block;
+    color: #e08b62;
+}
+.tally {
+    margin: clamp(36px, 6vh, 64px) 0 0;
+    display: grid;
+    justify-items: center;
+    gap: 6px;
+}
+.tally-number {
+    font: 500 clamp(1.6rem, 2.8vw, 2.4rem) / 1 var(--sans);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+}
+.tally-label {
+    font-size: 13px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--on-night-muted);
+}
+.load-line {
+    width: min(280px, 60vw);
+    height: 2px;
+    margin-top: 18px;
+    background: rgba(245, 241, 234, 0.18);
+    overflow: hidden;
+}
+.load-line span {
+    display: block;
+    height: 100%;
+    background: var(--on-night);
+    transform-origin: 0 50%;
+    transform: scaleX(0);
+    transition: transform 0.5s ease;
 }
 .hero-steps {
     position: relative;
