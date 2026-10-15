@@ -2,6 +2,7 @@
 // the live view, and hands them over as limits.json and settings.json to upload.
 import { createViewer, defaultSettings } from './index.js';
 import { sceneFolder, loadScene } from './scene.js';
+import { storyPoseAt } from './story.js';
 
 const $ = (selector) => document.querySelector(selector);
 const stage = $('#stage');
@@ -58,17 +59,17 @@ const sorted = (a, b) => (a <= b ? [a, b] : [b, a]);
 const MODES = ['orbit', 'walk', 'fly'];
 
 // Scene types: sensible defaults for the modes and what the camera bumps into. Anything changed
-// under Advanced makes the scene Custom.
+// in the mode tabs that doesn't match one makes the scene Custom.
 const PRESETS = {
     object: { modes: ['orbit'], mode: 'orbit', collision: { orbit: true, fly: true }, holdOrbit: false },
     room: { modes: ['orbit', 'walk'], mode: 'walk', collision: { orbit: true, fly: true }, holdOrbit: false },
     place: { modes: ['orbit', 'walk', 'fly'], mode: 'orbit', collision: { orbit: true, fly: true }, holdOrbit: false }
 };
 const PRESET_HINTS = {
-    object: 'Visitors circle one subject: orbit only, around a fixed point. Set the point below.',
-    room: 'Visitors walk through the space and can switch to orbit. Walking bumps into the walls; in orbit the camera floats.',
-    place: 'Visitors orbit, walk and fly freely within the box.',
-    custom: 'Custom: set under Advanced.'
+    object: 'Visitors circle one subject, orbit only. Fix the point they circle under Orbit.',
+    room: 'Visitors walk through the space and can switch to orbit. Close openings under Walk.',
+    place: 'Visitors orbit, walk and fly, within the captured space.',
+    custom: 'Your own mix: set in the Orbit, Walk and Fly tabs.'
 };
 const presetOf = () => {
     const modes = MODES.filter((m) => draft.modes.includes(m));
@@ -153,6 +154,10 @@ const buildLimits = () => {
     return limits;
 };
 
+// What the saved files would hold; the draft remembers it as `saved` when they were last
+// saved (or loaded from the site), so the header can say when there is something unsaved.
+const filesKey = () => JSON.stringify({ limits: buildLimits(), settings: draft.settings });
+
 // ---- the viewer ---------------------------------------------------------------------------
 
 // Restarts happen one at a time, and only the last one asked for survives: quick clicks on
@@ -212,7 +217,12 @@ const restartViewer = async () => {
         const current = viewer;
         const leaveAnimation = () => {
             if (current === viewer && viewer.state.cameraMode === 'anim') {
-                viewer.state.cameraMode = startMode() === 'walk' ? (viewer.state.walkAllowed ? 'walk' : 'fly') : 'orbit';
+                // the open mode tab's mode, so its settings can be recorded straight away
+                const tab = document.querySelector('[role="tab"][aria-selected="true"]')?.dataset.tab;
+                const wanted = allowed().includes(tab) ? tab : startMode();
+                viewer.state.cameraMode = wanted === 'walk'
+                    ? (viewer.state.walkAllowed ? 'walk' : 'fly')
+                    : wanted === 'fly' ? 'fly' : 'orbit';
             }
         };
         viewer.events.on('cameraMode:changed', (mode) => mode === 'anim' && setTimeout(leaveAnimation, 0));
@@ -331,29 +341,35 @@ const render = () => {
     );
     select.value = startIn ?? '';
     $('#start-row').hidden = modes.length < 2;
-    $('#orbit-tools').hidden = !modes.includes('orbit');
-    $('#walk-tools').hidden = !modes.includes('walk') && !modes.includes('orbit');
+    // each mode's tab: its settings, or a note and a button when visitors don't get it
+    for (const mode of MODES) {
+        const on = modes.includes(mode);
+        $(`[data-off="${mode}"]`).hidden = on;
+        $(`[data-on="${mode}"]`).hidden = !on;
+        $(`#tab-${mode}`).classList.toggle('off', !on);
+    }
+    // the orbit camera can be held by the walls drawn while walking
+    $('#walls-orbit').closest('label').hidden = !(draft.walls?.length || draft.fence.length);
     const names = modes.map((mode) => MODE_LABELS[mode].toLowerCase());
     $('#mode-hint').textContent = !startIn
         ? 'Visitors switch freely between orbit, walk and fly and get the intro animation. Limits still apply.'
         : modes.length === 1
-          ? `Visitors only ${names[0]}, within the limits below. The animation is a Tour button.`
+          ? `Visitors only ${names[0]}. The animation is a Tour button.`
           : `Visitors start in ${MODE_LABELS[startIn].toLowerCase()} and can switch to ${names.filter((n) => n !== MODE_LABELS[startIn].toLowerCase()).join(' and ')}. The animation is a Tour button.`;
     $('#out-orbit-point').textContent = draft.orbitTarget
         ? `fixed at ${draft.orbitTarget.map((v) => round(v, 2)).join(', ')}`
         : 'not fixed: visitors can pan and click a new point';
     $('#pan-row').hidden = Boolean(draft.orbitTarget);
-    $('#pan-pinned').hidden = !draft.orbitTarget;
     $('#nudge-row').hidden = !draft.orbitTarget;
     $('#nudge-hint').hidden = !draft.orbitTarget || !(draft.orbitNudge > 0);
     $('#orbit-nudge').value = String(draft.orbitNudge ?? 0);
     $('#stop-walls').checked = draft.collision.orbit;
-    $('#floor-tools').hidden = !modes.includes('walk');
     $('#flat-floor').checked = draft.floor !== null;
     $('#floor-height-tools').hidden = draft.floor === null;
     if (document.activeElement !== $('#floor-height')) $('#floor-height').value = String(draft.floor ?? draft.floorHeight ?? 0);
     viewer?.setFloor?.(modes.includes('walk') ? draft.floor : null);
     $('#stay-in').checked = draft.edge !== 'off';
+    $('#edge-row').hidden = draft.edge === 'off';
     for (const input of document.querySelectorAll('input[name="edge"]')) {
         input.checked = input.value === (draft.edge === 'off' ? draft.edgeTightness : draft.edge);
     }
@@ -376,6 +392,8 @@ const render = () => {
     $('#pan').value = draft.pan;
     $('#pan-margin').hidden = draft.pan !== 'box';
     $('#pan-margin').nextElementSibling.hidden = draft.pan !== 'box';
+    const hasLimits = Object.keys(m).length > 0 || draft.pan !== 'free' || Boolean(draft.orbitTarget);
+    $('#clear-orbit').disabled = !hasLimits;
 
     const wallList = $('#walls');
     wallList.replaceChildren();
@@ -400,6 +418,7 @@ const render = () => {
     });
     drawWalls();
 
+    $('#clear-walls').disabled = !draft.walls?.length;
     $('#old-fence').hidden = draft.fence.length === 0;
     $('#out-fence').textContent = `This scene has a fence from before (${draft.fence.length} corners); the box does its job now.`;
     const preset = presetOf();
@@ -407,7 +426,6 @@ const render = () => {
         input.checked = input.value === preset;
     }
     $('#preset-hint').textContent = PRESET_HINTS[preset];
-    $('#object-point').hidden = preset !== 'object' && !draft.orbitTarget;
     $('#collide-fly').checked = draft.collision.fly;
     $('#walls-orbit').checked = draft.holdOrbit;
 
@@ -454,6 +472,9 @@ const render = () => {
     const startDistance = start ? Math.hypot(...start.position.map((v, i) => v - start.target[i])) : 0;
     const startOff = Boolean(limits.mode === 'orbit' && zoom && start &&
         (startDistance < zoom[0] * 0.98 || startDistance > zoom[1] * 1.02));
+    $('#out-start').textContent = start
+        ? `Saved: ${round(startDistance, 1)} m from what it looks at.`
+        : "Not set: the scene opens on the viewer's own view.";
     $('#start-warning').hidden = !startOff;
     $('#start-warning').textContent = startOff
         ? `The start view circles a point ${round(startDistance, 1)} m away, outside the zoom limits, ` +
@@ -461,6 +482,120 @@ const render = () => {
         : '';
     $('#preview').setAttribute('aria-pressed', String(previewing));
     $('#preview').textContent = previewing ? 'Back to editing' : 'Try as a visitor';
+    renderStory();
+    showDirty();
+};
+
+const showDirty = () => {
+    $('#dirty').hidden = filesKey() === draft.saved;
+};
+
+// ---- the scroll story ---------------------------------------------------------------------
+
+const keyframes = () => draft.settings.story?.keyframes ?? [];
+const smoothness = () => draft.settings.story?.smoothness ?? 1;
+const roundAll = (v) => v.map((x) => round(x, 4));
+
+// the keyframe the camera was last sent to, outlined in the list
+let currentKey = null;
+
+const setKeyframes = (list) => {
+    if (list.length) {
+        draft.settings.story = { ...(draft.settings.story ?? {}), keyframes: list };
+    } else {
+        delete draft.settings.story;
+    }
+    saveDraft();
+    render();
+};
+
+const goToKey = (index) => {
+    const k = keyframes()[index];
+    if (!k || !viewer) return;
+    viewer.setCameraPose(k.position, k.target, k.fov);
+    currentKey = index;
+    $('#story-scrub').value = String(index);
+    renderStory();
+};
+
+const renderStory = () => {
+    const list = keyframes();
+    $('#story-empty').hidden = list.length > 0;
+    $('#story-tools').hidden = list.length < 2;
+    $('#story-scrub').max = String(Math.max(1, list.length - 1));
+    $('#story-smooth').value = String(smoothness());
+    const items = list.map((k, index) => {
+        const item = document.createElement('li');
+        item.classList.toggle('current', index === currentKey);
+        const head = document.createElement('div');
+        head.className = 'key-head';
+        const title = document.createElement('input');
+        title.value = k.title ?? '';
+        title.placeholder = 'Title (optional)';
+        title.maxLength = 80;
+        title.setAttribute('aria-label', `Keyframe ${index + 1} title`);
+        title.addEventListener('input', () => {
+            k.title = title.value;
+            saveDraft();
+            showDirty();
+        });
+        head.append(title);
+        const text = document.createElement('textarea');
+        text.rows = 2;
+        text.maxLength = 400;
+        text.value = k.text ?? '';
+        text.placeholder = 'Caption (optional)';
+        text.setAttribute('aria-label', `Keyframe ${index + 1} caption`);
+        text.addEventListener('input', () => {
+            k.text = text.value;
+            saveDraft();
+            showDirty();
+        });
+        const actions = document.createElement('div');
+        actions.className = 'key-actions';
+        const action = (label, run, disabled = false, quiet = false) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.textContent = label;
+            b.disabled = disabled;
+            if (quiet) b.className = 'quiet';
+            b.addEventListener('click', run);
+            actions.append(b);
+        };
+        action('Go to', () => goToKey(index));
+        action('Use this view', () => {
+            const p = pose();
+            Object.assign(k, { position: roundAll(p.position), target: roundAll(p.focus), fov: round(p.fov, 2) });
+            currentKey = index;
+            setKeyframes(list);
+            setStatus(`Keyframe ${index + 1} now uses this view.`);
+        });
+        action('↑', () => {
+            [list[index - 1], list[index]] = [list[index], list[index - 1]];
+            currentKey = index - 1;
+            setKeyframes(list);
+        }, index === 0, true);
+        action('↓', () => {
+            [list[index + 1], list[index]] = [list[index], list[index + 1]];
+            currentKey = index + 1;
+            setKeyframes(list);
+        }, index === list.length - 1, true);
+        action('Delete', () => {
+            list.splice(index, 1);
+            currentKey = null;
+            setKeyframes(list);
+        }, false, true);
+        actions.lastChild.setAttribute('aria-label', `Delete keyframe ${index + 1}`);
+        item.append(head, text, actions);
+        return item;
+    });
+    // typing changes the draft without a render, so a rebuild here never steals the focus;
+    // rebuild only when something did change
+    const shape = JSON.stringify([list, currentKey]);
+    if ($('#keyframes').dataset.shape !== shape) {
+        $('#keyframes').replaceChildren(...items);
+        $('#keyframes').dataset.shape = shape;
+    }
 };
 
 // ---- an annotation's own limits -----------------------------------------------------------
@@ -578,6 +713,55 @@ const wire = () => {
         $('#panel').addEventListener(type, (event) => event.stopPropagation());
     }
 
+    // Tabs. Opening a camera mode's tab also switches the view to that mode, since its settings
+    // are recorded from it.
+    const tabs = [...document.querySelectorAll('[role="tab"]')];
+    const openTab = (name) => {
+        for (const tab of tabs) {
+            const selected = tab.dataset.tab === name;
+            tab.setAttribute('aria-selected', String(selected));
+            tab.tabIndex = selected ? 0 : -1;
+            $(`#pane-${tab.dataset.tab}`).hidden = !selected;
+        }
+        try {
+            localStorage.setItem('splat-editor:tab', name);
+        } catch {
+            // storage off: the tab is just not remembered
+        }
+        if (viewer && !previewing && allowed().includes(name) && viewer.state.cameraMode !== name) {
+            if (name !== 'walk' || viewer.state.walkAllowed) {
+                viewer.state.cameraMode = name;
+            } else {
+                setStatus('Walking needs the collision data; it starts once that has loaded.');
+            }
+        }
+    };
+    for (const tab of tabs) {
+        tab.addEventListener('click', () => openTab(tab.dataset.tab));
+        tab.addEventListener('keydown', (event) => {
+            const step = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
+            if (!step) return;
+            const next = tabs[(tabs.indexOf(tab) + step + tabs.length) % tabs.length];
+            next.focus();
+            openTab(next.dataset.tab);
+        });
+    }
+    let remembered = 'scene';
+    try {
+        remembered = localStorage.getItem('splat-editor:tab') ?? 'scene';
+    } catch {
+        // storage off
+    }
+    openTab(tabs.some((t) => t.dataset.tab === remembered) ? remembered : 'scene');
+    for (const button of document.querySelectorAll('[data-enable]')) {
+        button.addEventListener('click', () => {
+            if (!draft.modes.includes(button.dataset.enable)) draft.modes = [...draft.modes, button.dataset.enable];
+            saveDraft();
+            render();
+            openTab(button.dataset.enable);
+        });
+    }
+
     for (const input of document.querySelectorAll('input[name="modes"]')) {
         input.addEventListener('change', () => {
             draft.modes = input.checked ? [...draft.modes, input.value] : draft.modes.filter((m) => m !== input.value);
@@ -689,6 +873,35 @@ const wire = () => {
         render();
     });
 
+    $('#add-keyframe').addEventListener('click', () => {
+        const p = pose();
+        if (!p) return;
+        const list = [...keyframes(), { position: roundAll(p.position), target: roundAll(p.focus), fov: round(p.fov, 2), title: '', text: '' }];
+        currentKey = list.length - 1;
+        setKeyframes(list);
+        setStatus(`Keyframe ${list.length} added.` + (list.length === 1 ? ' Move to the next view and add another.' : ''));
+    });
+    $('#story-scrub').addEventListener('input', () => {
+        const list = keyframes();
+        if (!viewer || list.length < 2) return;
+        const at = storyPoseAt(list, Number($('#story-scrub').value), smoothness());
+        viewer.setCameraPose(at.position, at.target, at.fov, 0.08);
+        currentKey = null;
+    });
+    $('#story-smooth').addEventListener('change', () => {
+        draft.settings.story = { ...draft.settings.story, smoothness: Number($('#story-smooth').value) };
+        saveDraft();
+        render();
+    });
+    $('#preview-story').addEventListener('click', () => {
+        saveDraft();
+        const query = new URLSearchParams({ scene: folder.name, draft: '1' });
+        for (const key of ['base', 'webgl']) {
+            if (params.has(key)) query.set(key, params.get(key));
+        }
+        window.open(`story.html?${query}`, '_blank', 'noopener');
+    });
+
     $('#block-way').addEventListener('click', () => blockThisWay());
     $('#clear-walls').addEventListener('click', () => {
         draft.walls = [];
@@ -708,7 +921,7 @@ const wire = () => {
             if (viewer && p.mode === 'orbit') viewer.state.cameraMode = 'orbit';
             else if (viewer && p.mode === 'walk' && viewer.state.walkAllowed) viewer.state.cameraMode = 'walk';
             setStatus(input.value === 'object' && !draft.orbitTarget
-                ? 'Object: click the subject, then press Use the current focus as the orbit point.'
+                ? 'Object: click the subject, then press Fix at the current focus under Orbit.'
                 : `${input.value[0].toUpperCase()}${input.value.slice(1)} settings applied.`);
         });
     }
@@ -841,7 +1054,15 @@ const wire = () => {
         setTimeout(() => URL.revokeObjectURL(link.href), 1000);
     };
     // Named after the scene, so Publish Scene can match them to it (and never to another one).
-    $('#download-limits').addEventListener('click', () => download(`${folder.name}.limits.json`, buildLimits()));
+    $('#save-files').addEventListener('click', () => {
+        download(`${folder.name}.limits.json`, buildLimits());
+        // a second download right away can be blocked as "multiple downloads"; a beat apart is fine
+        setTimeout(() => download(`${folder.name}.settings.json`, draft.settings), 400);
+        draft.saved = filesKey();
+        saveDraft();
+        render();
+        setStatus(`Saved ${folder.name}.limits.json and ${folder.name}.settings.json to Downloads.`);
+    });
     // the current view as the portfolio picture: a supersampled 1600 x 1000 render, as WebP
     $('#download-poster').addEventListener('click', async () => {
         setStatus('Rendering the poster…');
@@ -859,13 +1080,13 @@ const wire = () => {
         setTimeout(() => URL.revokeObjectURL(link.href), 1000);
         setStatus(`Poster saved as ${folder.name}.poster.webp.`);
     });
-    $('#download-settings').addEventListener('click', () => download(`${folder.name}.settings.json`, draft.settings));
     $('#reset-draft').addEventListener('click', async () => {
         scene = await loadScene(folder, defaultSettings);  // the site as it is now
         draft = draftFrom(scene.limits, structuredClone(scene.settings));
+        draft.saved = filesKey();
         saveDraft();
         render();
-        setStatus('Back to the files on the hosting.');
+        setStatus('Back to the files on the site.');
         await startViewer();
     });
 
@@ -933,9 +1154,12 @@ if (!folder) {
             draft.floorHeight ??= draft.floor ?? 0;
             draft.collision ??= { orbit: true, fly: true };
             draft.holdOrbit ??= false;
-            setStatus('Continuing your unsaved draft from last time.');
+            draft.saved ??= null;
+            draft.modes = MODES.filter((m) => draft.modes.includes(m));
+            if (filesKey() !== draft.saved) setStatus('Continuing your unsaved changes from last time.');
         } else {
             draft = draftFrom(scene.limits, structuredClone(scene.settings));
+            draft.saved = filesKey();
             if (saved) {
                 saveDraft();
                 setStatus("The scene changed on the site since your last draft, so this starts from the site's version.");

@@ -91488,6 +91488,8 @@ class CameraManager {
     // Gaussian Studio: set (or clear) the scene's soft edge after construction; the automatic
     // edge is computed from the splat once it has loaded.
     setEdge;
+    // Gaussian Studio: glide the orbit camera to a pose (the editor's story keyframes)
+    gotoPose;
     // holds the camera state
     camera = new Camera();
     constructor(global, bbox, collision = null) {
@@ -91895,6 +91897,15 @@ class CameraManager {
             const turnEase = settleFrom(slope * TURN_LEAD);
             controllers.orbit.goto(tmpCamera);
             startTransition(duration, travelEase, (x) => turnEase(Math.min(1, x / TURN_LEAD)));
+        };
+        // Gaussian Studio: glide to an exact pose and keep orbiting around its target from there
+        this.gotoPose = (position, target, fov, duration = 0.8) => {
+            events.fire('orbitTarget:clear');
+            state.cameraMode = 'orbit';
+            tmpCamera.fov = fov;
+            tmpCamera.look(position, target);
+            controllers.orbit.goto(tmpCamera);
+            startTransition(Math.max(duration, 1e-3));
         };
         // tap-to-navigate: start auto-driving the active mode toward a picked position
         events.on('navigateTo', (position, normal, speedMul = 1) => {
@@ -103565,6 +103576,9 @@ const createViewer = async (options) => {
         pick: async (x, y) => {
             const hit = await viewer.picker?.pick(x, y);
             return hit ? [hit.x, hit.y, hit.z] : null;
+        },
+        setCameraPose: (position, target, fov, duration) => {
+            viewer.cameraManager?.gotoPose(new Vec3(...position), new Vec3(...target), fov, duration);
         },
         cameraPose: () => {
             const cam = viewer.cameraManager?.camera;

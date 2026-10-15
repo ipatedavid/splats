@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+        <title>Story</title>
+        <link rel="stylesheet" href="./index.css" />
+        <script src="./config.js"></script>
+        <style>
+            /* The splat fills the window behind the page; the page scrolls over it, one section
+               per keyframe. The splat takes no input: scrolling is the only control. */
+            :root {
+                --ink: #f4f1ec;
+                --muted: rgba(244, 241, 236, 0.72);
+                --glass: rgba(14, 14, 16, 0.5);
+                --display: 'Helvetica Neue', Helvetica, Arial, system-ui, sans-serif;
+                color-scheme: dark;
+            }
+            html {
+                background: #0b0b0c;
+            }
+            body {
+                margin: 0;
+                color: var(--ink);
+                font: 16px/1.55 var(--display);
+                background: #0b0b0c;
+            }
+            [hidden] {
+                display: none !important;
+            }
+            #stage,
+            #poster {
+                position: fixed;
+                inset: 0;
+                pointer-events: none;
+            }
+            #poster {
+                background: center / cover no-repeat;
+                transition: opacity 1.2s ease;
+            }
+            #poster.gone {
+                opacity: 0;
+            }
+            /* a soft shade at the bottom and left so captions read over any splat */
+            .shade {
+                position: fixed;
+                inset: 0;
+                pointer-events: none;
+                background: linear-gradient(90deg, rgba(0, 0, 0, 0.45), transparent 55%),
+                    linear-gradient(0deg, rgba(0, 0, 0, 0.35), transparent 35%);
+            }
+            .bar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                z-index: 2;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: calc(env(safe-area-inset-top, 0px) + 18px) clamp(16px, 4vw, 48px) 18px;
+                font-size: 14px;
+                letter-spacing: 0.02em;
+            }
+            .bar a {
+                color: var(--ink);
+                text-decoration: none;
+            }
+            .bar a:hover,
+            .bar a:focus-visible {
+                text-decoration: underline;
+                text-underline-offset: 3px;
+            }
+            #progress {
+                position: fixed;
+                left: 0;
+                bottom: 0;
+                z-index: 2;
+                height: 2px;
+                width: 100%;
+                background: var(--ink);
+                transform-origin: 0 50%;
+                transform: scaleX(0);
+                opacity: 0.8;
+            }
+            main {
+                position: relative;
+                z-index: 1;
+            }
+            .step {
+                min-height: 100vh;
+                min-height: 100svh;
+                display: flex;
+                align-items: center;
+                padding: 0 clamp(16px, 6vw, 96px);
+                box-sizing: border-box;
+            }
+            .card {
+                max-width: 30rem;
+                opacity: 0;
+                transform: translateY(24px);
+                transition: opacity 0.8s ease, transform 0.8s ease;
+            }
+            .step.shown .card {
+                opacity: 1;
+                transform: none;
+            }
+            .count {
+                font-size: 13px;
+                letter-spacing: 0.12em;
+                color: var(--muted);
+                margin: 0 0 14px;
+                font-variant-numeric: tabular-nums;
+            }
+            .card h2 {
+                font-size: clamp(2.2rem, 5.5vw, 4.4rem);
+                line-height: 1.02;
+                letter-spacing: -0.02em;
+                font-weight: 500;
+                margin: 0 0 18px;
+                text-wrap: balance;
+            }
+            .card p {
+                margin: 0;
+                font-size: clamp(1rem, 1.4vw, 1.15rem);
+                color: var(--muted);
+                max-width: 26rem;
+            }
+            .end .card {
+                display: grid;
+                gap: 22px;
+                justify-items: start;
+            }
+            .button {
+                display: inline-block;
+                padding: 14px 26px;
+                border-radius: 999px;
+                background: var(--ink);
+                color: #111;
+                text-decoration: none;
+                font-weight: 500;
+            }
+            .button:hover,
+            .button:focus-visible {
+                outline: 2px solid var(--ink);
+                outline-offset: 3px;
+            }
+            .hint {
+                position: fixed;
+                left: 50%;
+                bottom: calc(env(safe-area-inset-bottom, 0px) + 28px);
+                transform: translateX(-50%);
+                z-index: 2;
+                font-size: 12px;
+                letter-spacing: 0.16em;
+                text-transform: uppercase;
+                color: var(--muted);
+                transition: opacity 0.6s ease;
+            }
+            .hint.gone {
+                opacity: 0;
+            }
+            #message {
+                position: fixed;
+                inset: 0;
+                display: grid;
+                place-items: center;
+                padding: 24px;
+                text-align: center;
+                color: var(--muted);
+                z-index: 3;
+            }
+            @media (prefers-reduced-motion: reduce) {
+                .card {
+                    transition: none;
+                    transform: none;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div id="poster"></div>
+        <div id="stage"></div>
+        <div class="shade"></div>
+        <header class="bar">
+            <a href="./" id="home">Portfolio</a>
+            <a id="explore-top" href="#">Explore in 3D</a>
+        </header>
+        <main id="steps"></main>
+        <div class="hint" id="hint">Scroll</div>
+        <div id="progress"></div>
+        <p id="message" hidden></p>
+        <script type="module">
+            import { createViewer, defaultSettings } from './index.js';
+            import { sceneFolder, loadScene } from './scene.js';
+            import { storyKeyframes, storySettings, bindScroll } from './story.js';
+
+            const $ = (s) => document.querySelector(s);
+            const params = new URL(location.href).searchParams;
+            const folder = sceneFolder(params);
+            const message = (text) => {
+                $('#message').textContent = text;
+                $('#message').hidden = false;
+            };
+
+            // ?draft: the editor's unsaved draft from this browser, for previewing before saving
+            const draftSettings = () => {
+                try {
+                    return JSON.parse(localStorage.getItem(`splat-editor:${folder.url}`) ?? 'null')?.settings ?? null;
+                } catch {
+                    return null;
+                }
+            };
+
+            const section = (keyframe, index, count) => {
+                const step = document.createElement('section');
+                step.className = 'step';
+                const card = document.createElement('div');
+                card.className = 'card';
+                const n = document.createElement('p');
+                n.className = 'count';
+                n.textContent = `${String(index + 1).padStart(2, '0')} / ${String(count).padStart(2, '0')}`;
+                card.append(n);
+                if (keyframe.title) {
+                    const h = document.createElement('h2');
+                    h.textContent = keyframe.title;
+                    card.append(h);
+                }
+                if (keyframe.text) {
+                    const p = document.createElement('p');
+                    p.textContent = keyframe.text;
+                    card.append(p);
+                }
+                step.append(card);
+                return step;
+            };
+
+            if (!folder) {
+                message('No scene chosen. Add ?scene=name to the address.');
+            } else {
+                try {
+                    const scene = await loadScene(folder, defaultSettings);
+                    const settings = (params.has('draft') && draftSettings()) || scene.settings;
+                    const keyframes = storyKeyframes(settings.story);
+                    const explore = `view.html?${new URLSearchParams({ scene: folder.name, ...(params.get('base') ? { base: params.get('base') } : {}) })}`;
+                    $('#explore-top').href = explore;
+                    if (!keyframes.length) {
+                        message('This scene has no story yet. Add keyframes in the editor, under Story.');
+                    } else {
+                        if (scene.posterUrl) $('#poster').style.backgroundImage = `url("${scene.posterUrl}")`;
+                        const steps = keyframes.map((k, i) => section(k, i, keyframes.length));
+                        $('#steps').append(...steps);
+                        // the last step invites visitors into the free viewer
+                        const last = steps[steps.length - 1];
+                        last.classList.add('end');
+                        const go = document.createElement('a');
+                        go.className = 'button';
+                        go.href = explore;
+                        go.textContent = 'Explore it yourself';
+                        last.querySelector('.card').append(go);
+
+                        const shown = new IntersectionObserver(
+                            (entries) => entries.forEach((e) => e.target.classList.toggle('shown', e.isIntersecting)),
+                            { rootMargin: '-35% 0px -35% 0px' }
+                        );
+                        steps.forEach((s) => shown.observe(s));
+
+                        const viewer = await createViewer({
+                            container: $('#stage'),
+                            settings: storySettings(settings, keyframes, settings.story?.smoothness ?? 1),
+                            contentUrl: scene.contentUrl,
+                            skyboxUrl: scene.skyboxUrl,
+                            ui: false,
+                            noanim: true,
+                            renderer: params.has('webgl') ? 'webgl' : 'webgpu'
+                        });
+                        window.viewer = viewer;
+                        viewer.events.on('loaded:changed', (loaded) => loaded && $('#poster').classList.add('gone'));
+                        bindScroll(viewer, steps);
+
+                        const onScroll = () => {
+                            const max = document.documentElement.scrollHeight - innerHeight;
+                            $('#progress').style.transform = `scaleX(${max > 0 ? scrollY / max : 0})`;
+                            $('#hint').classList.toggle('gone', scrollY > 40);
+                        };
+                        addEventListener('scroll', onScroll, { passive: true });
+                        onScroll();
+                    }
+                } catch (error) {
+                    message(`This scene could not be loaded. ${error.message}`);
+                }
+            }
+        </script>
+    </body>
+</html>

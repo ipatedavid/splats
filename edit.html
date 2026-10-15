@@ -12,195 +12,273 @@
     <body>
         <div id="stage"></div>
         <aside id="panel" aria-label="Scene editor">
-            <header>
-                <h1 id="title">Scene editor</h1>
-                <p class="hint">
-                    Changes here only make files for you to upload. Nothing on the hosting changes until
-                    you upload them.
-                </p>
+            <header class="top">
+                <div class="title-row">
+                    <h1 id="title">Scene editor</h1>
+                    <span id="dirty" class="badge" hidden>Unsaved</span>
+                </div>
                 <p id="pose" class="readout" aria-live="off"></p>
             </header>
 
-            <section>
-                <h2>Scene type</h2>
-                <div class="segmented" role="radiogroup" aria-label="Scene type">
-                    <label><input type="radio" name="preset" value="object" /> Object</label>
-                    <label><input type="radio" name="preset" value="room" /> Room</label>
-                    <label><input type="radio" name="preset" value="place" /> Place</label>
-                </div>
-                <p class="hint" id="preset-hint"></p>
-                <div id="object-point">
-                    <div class="row">
-                        <button id="orbit-point">Use the current focus as the orbit point</button>
-                        <button class="quiet" id="clear-orbit-point">Clear</button>
-                    </div>
-                    <output id="out-orbit-point"></output>
-                    <div class="row" id="nudge-row">
-                        <label for="orbit-nudge">Panning around the point</label>
-                        <select id="orbit-nudge">
-                            <option value="0">Locked</option>
-                            <option value="0.3">A little (30 cm)</option>
-                            <option value="1">More (1 m)</option>
-                        </select>
-                    </div>
-                    <p class="hint" id="nudge-hint">Visitors can nudge the view off the point; it eases back when they let go.</p>
-                </div>
-            </section>
-            <section id="bounds">
-                <h2>Boundaries</h2>
-                <label class="check"><input type="checkbox" id="stop-walls" /> Stop at walls</label>
-                <label class="check"><input type="checkbox" id="show-collision" /> Show the walls the camera stops at</label>
-                <p class="hint" id="collision-note"></p>
-                <p class="hint">
-                    The camera stops at walls, floors and ceilings, and passes through small things
-                    like plants and chairs. Walking always stops at everything.
-                </p>
-                <label class="check"><input type="checkbox" id="stay-in" /> Stay within the scene</label>
-                <p class="hint">
-                    Catches what slips past the walls: open doors and windows, uncaptured gaps, open
-                    scenes. The edge is found from the splat; visitors who push past it meet a soft
-                    resistance and ease back in.
-                </p>
-                <output id="out-edge"></output>
-                <div id="floor-tools">
-                    <label class="check"><input type="checkbox" id="flat-floor" /> Floor at 0</label>
-                    <p class="hint">
-                        For reflective or broken floors that walkers fall through: they walk on a level
-                        floor at height 0, SuperSplat's ground grid, and walls and furniture still stop
-                        them. Line the floor up with the grid in SuperSplat first.
-                    </p>
-                </div>
-            </section>
-            <section>
-                <h2>Start view</h2>
-                <div class="row">
-                    <button id="start-view">Use this view</button>
-                    <label for="background">Background</label>
-                    <input id="background" type="color" />
-                </div>
-                <p class="hint">For an orbit scene, click the subject first so the view circles it.</p>
-                <p id="start-warning" class="warn" hidden></p>
-            </section>
+            <nav class="tabs" role="tablist" aria-label="Editor sections">
+                <button role="tab" id="tab-scene" data-tab="scene" aria-controls="pane-scene">Scene</button>
+                <button role="tab" id="tab-orbit" data-tab="orbit" aria-controls="pane-orbit">Orbit</button>
+                <button role="tab" id="tab-walk" data-tab="walk" aria-controls="pane-walk">Walk</button>
+                <button role="tab" id="tab-fly" data-tab="fly" aria-controls="pane-fly">Fly</button>
+                <button role="tab" id="tab-views" data-tab="views" aria-controls="pane-views">Views</button>
+                <button role="tab" id="tab-story" data-tab="story" aria-controls="pane-story">Story</button>
+                <button role="tab" id="tab-notes" data-tab="notes" aria-controls="pane-notes">Notes</button>
+            </nav>
 
-            <section>
-                <h2>Annotations</h2>
-                <button id="place">Place an annotation…</button>
-                <form id="annotation-form" hidden>
-                    <p class="hint">
-                        Move to where visitors should see it from. Saving keeps your position and aims
-                        the view at the marker.
-                    </p>
-                    <label for="ann-title">Title</label>
-                    <input id="ann-title" required maxlength="80" />
-                    <label for="ann-text">Text</label>
-                    <textarea id="ann-text" rows="3" maxlength="600"></textarea>
-                    <div class="row">
-                        <button type="submit">Save annotation</button>
-                        <button type="button" class="quiet" id="ann-cancel">Cancel</button>
+            <div class="panes">
+                <!-- Scene: what it is, how visitors move, what holds them in -->
+                <section class="pane" role="tabpanel" id="pane-scene" aria-labelledby="tab-scene">
+                    <div class="group">
+                        <h2>What is it?</h2>
+                        <div class="segmented" role="radiogroup" aria-label="Scene type">
+                            <label><input type="radio" name="preset" value="object" /> Object</label>
+                            <label><input type="radio" name="preset" value="room" /> Room</label>
+                            <label><input type="radio" name="preset" value="place" /> Place</label>
+                        </div>
+                        <p class="hint" id="preset-hint"></p>
                     </div>
-                </form>
-                <ol id="annotations"></ol>
-            </section>
+                    <div class="group">
+                        <h2>Visitors can</h2>
+                        <div class="segmented" role="group" aria-label="Camera modes for visitors">
+                            <label><input type="checkbox" name="modes" value="orbit" /> Orbit</label>
+                            <label><input type="checkbox" name="modes" value="walk" /> Walk</label>
+                            <label><input type="checkbox" name="modes" value="fly" /> Fly</label>
+                        </div>
+                        <div class="field" id="start-row">
+                            <label for="start-mode">They start in</label>
+                            <select id="start-mode"></select>
+                        </div>
+                        <p class="hint" id="mode-hint"></p>
+                    </div>
+                    <div class="group">
+                        <h2>Keep visitors inside</h2>
+                        <label class="check"><input type="checkbox" id="stay-in" /> Stay within the captured space</label>
+                        <div class="segmented small" id="edge-row" role="radiogroup" aria-label="How closely the edge follows the capture">
+                            <label><input type="radio" name="edge" value="loose" /> Loose</label>
+                            <label><input type="radio" name="edge" value="normal" /> Normal</label>
+                            <label><input type="radio" name="edge" value="tight" /> Tight</label>
+                        </div>
+                        <output id="out-edge"></output>
+                        <p class="hint">
+                            Catches what slips past the walls: open doors, uncaptured gaps, open scenes.
+                            Visitors who push past it meet a soft resistance. Changing it shows the edge
+                            for a moment.
+                        </p>
+                        <label class="check"><input type="checkbox" id="show-collision" /> Show what the camera bumps into</label>
+                        <p class="hint" id="collision-note"></p>
+                    </div>
+                    <div class="group">
+                        <h2>Look</h2>
+                        <div class="field">
+                            <label for="background">Background</label>
+                            <input id="background" type="color" />
+                        </div>
+                    </div>
+                </section>
 
-            <details id="advanced">
-                <summary>Advanced</summary>
-                <section>
-                    <h2>Camera modes</h2>
-                    <div class="segmented" role="group" aria-label="Camera modes for visitors">
-                        <label><input type="checkbox" name="modes" value="orbit" /> Orbit</label>
-                        <label><input type="checkbox" name="modes" value="walk" /> Walk</label>
-                        <label><input type="checkbox" name="modes" value="fly" /> Fly</label>
+                <!-- Orbit: circling a subject -->
+                <section class="pane" role="tabpanel" id="pane-orbit" aria-labelledby="tab-orbit" hidden>
+                    <div class="off-note" data-off="orbit">
+                        <p>Visitors can't orbit in this scene.</p>
+                        <button data-enable="orbit">Allow orbit</button>
                     </div>
-                    <div class="row" id="start-row">
-                        <label for="start-mode">Starts in</label>
-                        <select id="start-mode"></select>
+                    <div class="mode-body" data-on="orbit">
+                        <div class="group">
+                            <h2>Orbit point</h2>
+                            <p class="hint">Click the subject, then fix the point so every visitor circles it.</p>
+                            <div class="row">
+                                <button id="orbit-point">Fix at the current focus</button>
+                                <button class="quiet" id="clear-orbit-point">Clear</button>
+                            </div>
+                            <output id="out-orbit-point"></output>
+                            <div class="field" id="nudge-row">
+                                <label for="orbit-nudge">Panning around it</label>
+                                <select id="orbit-nudge">
+                                    <option value="0">Locked</option>
+                                    <option value="0.3">A little (30 cm)</option>
+                                    <option value="1">More (1 m)</option>
+                                </select>
+                            </div>
+                            <p class="hint" id="nudge-hint">Visitors can nudge the view off the point; it eases back when they let go.</p>
+                        </div>
+                        <div class="group">
+                            <h2>Limits</h2>
+                            <p class="hint">Move the view to an edge, then press its button.</p>
+                            <div class="limits">
+                                <span class="lim-name">Turn</span>
+                                <button data-mark="left">Left edge</button>
+                                <button data-mark="right">Right edge</button>
+                                <output id="out-yaw"></output>
+                                <span class="lim-name">Tilt</span>
+                                <button data-mark="low">Lowest</button>
+                                <button data-mark="high">Highest</button>
+                                <output id="out-pitch"></output>
+                                <span class="lim-name">Zoom</span>
+                                <button data-mark="near">Closest</button>
+                                <button data-mark="far">Furthest</button>
+                                <output id="out-distance"></output>
+                            </div>
+                            <div class="field" id="pan-row">
+                                <label for="pan">Panning</label>
+                                <select id="pan">
+                                    <option value="free">Free</option>
+                                    <option value="locked">Locked</option>
+                                    <option value="box">Near the current focus</option>
+                                </select>
+                                <input id="pan-margin" type="number" min="0.1" step="0.1" value="1" aria-label="Distance allowed, in metres" />
+                                <span class="unit">m</span>
+                            </div>
+                            <button class="quiet" id="clear-orbit">Clear all orbit limits</button>
+                        </div>
+                        <div class="group">
+                            <h2>Bumping into things</h2>
+                            <label class="check"><input type="checkbox" id="stop-walls" /> Stops at walls, floors and ceilings</label>
+                            <label class="check"><input type="checkbox" id="walls-orbit" /> Also stops at the walls drawn under Walk</label>
+                        </div>
                     </div>
-                    <p class="hint" id="mode-hint"></p>
                 </section>
-                <section>
-                    <h2>Scene edge</h2>
-                    <div class="segmented" role="radiogroup" aria-label="How closely the scene edge follows the capture">
-                        <label><input type="radio" name="edge" value="loose" /> Loose</label>
-                        <label><input type="radio" name="edge" value="normal" /> Normal</label>
-                        <label><input type="radio" name="edge" value="tight" /> Tight</label>
+
+                <!-- Walk: on foot, at eye level -->
+                <section class="pane" role="tabpanel" id="pane-walk" aria-labelledby="tab-walk" hidden>
+                    <div class="off-note" data-off="walk">
+                        <p>Visitors can't walk in this scene.</p>
+                        <button data-enable="walk">Allow walking</button>
                     </div>
-                    <p class="hint">How closely the edge follows the capture. Loosen it if it cuts off real space; changing it shows the edge for a moment.</p>
+                    <div class="mode-body" data-on="walk">
+                        <div class="group">
+                            <h2>Walls</h2>
+                            <p class="hint">
+                                Close openings walkers shouldn't use: walk into one, face out of the area
+                                and press Block this way. The wall reaches sideways until it meets
+                                something on each side.
+                            </p>
+                            <div class="row">
+                                <button id="block-way">Block this way</button>
+                                <button class="quiet" id="clear-walls">Remove all</button>
+                            </div>
+                            <ol id="walls" class="list"></ol>
+                            <div id="old-fence" class="row">
+                                <output id="out-fence"></output>
+                                <button class="quiet" id="clear-fence">Remove the fence</button>
+                            </div>
+                        </div>
+                        <div class="group">
+                            <h2>Floor</h2>
+                            <label class="check"><input type="checkbox" id="flat-floor" /> Walk on a flat floor</label>
+                            <div class="field" id="floor-height-tools">
+                                <label for="floor-height">Floor height</label>
+                                <input id="floor-height" type="number" step="0.01" aria-label="Floor height, in metres" />
+                                <span class="unit">m</span>
+                            </div>
+                            <p class="hint">
+                                For reflective or broken floors that walkers fall through. 0 is SuperSplat's
+                                ground grid; walls and furniture still stop them.
+                            </p>
+                        </div>
+                    </div>
                 </section>
-                <section id="floor-height-tools">
-                    <h2>Floor height</h2>
-                    <div class="row">
-                        <label for="floor-height">Flat floor at</label>
-                        <input id="floor-height" type="number" step="0.01" aria-label="Floor height, in metres" />
-                        <span class="unit">m</span>
+
+                <!-- Fly: free movement -->
+                <section class="pane" role="tabpanel" id="pane-fly" aria-labelledby="tab-fly" hidden>
+                    <div class="off-note" data-off="fly">
+                        <p>Visitors can't fly in this scene.</p>
+                        <button data-enable="fly">Allow flying</button>
                     </div>
-                    <p class="hint">Only for a scene whose floor is not on SuperSplat's grid; otherwise leave it at 0.</p>
-                </section>
-                <section>
-                    <h2>Flying</h2>
-                    <label class="check"><input type="checkbox" id="collide-fly" /> Flying bumps into the scene</label>
-                </section>
-                <section id="walk-tools">
-                    <h2>Walls</h2>
-                    <p class="hint">
-                        Close openings you don't want walkers to use: walk into one, face out of the
-                        area, and press Block this way. The wall reaches sideways until it meets
-                        something on each side. Press Try as a visitor to walk into them.
-                    </p>
-                    <div class="row">
-                        <button id="block-way">Block this way</button>
-                        <button class="quiet" id="clear-walls">Clear walls</button>
-                    </div>
-                    <ol id="walls"></ol>
-                    <label class="check"><input type="checkbox" id="walls-orbit" /> Walls also stop the orbit camera</label>
-                    <div id="old-fence" class="row">
-                        <output id="out-fence"></output>
-                        <button class="quiet" id="clear-fence">Remove the fence</button>
+                    <div class="mode-body" data-on="fly">
+                        <div class="group">
+                            <h2>Bumping into things</h2>
+                            <label class="check"><input type="checkbox" id="collide-fly" /> Flying stops at the scene's surfaces</label>
+                            <p class="hint">Off lets visitors fly through walls; the edge under Scene still holds them in.</p>
+                        </div>
                     </div>
                 </section>
-                <section id="orbit-tools">
-                    <h2>Orbit limits</h2>
-                    <p class="hint">Move the view to the edge you want, then press the matching button.</p>
-                    <div class="grid">
-                        <span>Turn</span>
-                        <button data-mark="left">Left edge here</button>
-                        <button data-mark="right">Right edge here</button>
-                        <output id="out-yaw"></output>
-                        <span>Tilt</span>
-                        <button data-mark="low">Lowest here</button>
-                        <button data-mark="high">Highest here</button>
-                        <output id="out-pitch"></output>
-                        <span>Zoom</span>
-                        <button data-mark="near">Closest here</button>
-                        <button data-mark="far">Furthest here</button>
-                        <output id="out-distance"></output>
+
+                <!-- Views: what visitors see first, and the portfolio picture -->
+                <section class="pane" role="tabpanel" id="pane-views" aria-labelledby="tab-views" hidden>
+                    <div class="group">
+                        <h2>Start view</h2>
+                        <p class="hint">What visitors see when the scene opens. For an orbit scene, click the subject first so the view circles it.</p>
+                        <button id="start-view">Use this view</button>
+                        <output id="out-start"></output>
+                        <p id="start-warning" class="warn" hidden></p>
                     </div>
-                    <p class="hint" id="pan-pinned">Panning is set with the orbit point, under Scene type.</p>
-                    <div class="row" id="pan-row">
-                        <label for="pan">Panning</label>
-                        <select id="pan">
-                            <option value="free">Free</option>
-                            <option value="locked">Locked</option>
-                            <option value="box">Near the current focus</option>
-                        </select>
-                        <input id="pan-margin" type="number" min="0.1" step="0.1" value="1" aria-label="Distance allowed, in metres" />
-                        <span class="unit">m</span>
+                    <div class="group">
+                        <h2>Poster</h2>
+                        <p class="hint">The picture on the portfolio page, and what shows while the splat loads. Frame a good view, then save it.</p>
+                        <button id="download-poster">Save poster from this view</button>
                     </div>
-                    <button class="quiet" id="clear-orbit">Clear orbit limits</button>
                 </section>
-            </details>
-            <section class="actions">
-                <button id="preview" aria-pressed="false">Try as a visitor</button>
-                <button id="download-limits">Download limits</button>
-                <button id="download-settings">Download settings</button>
-                <button id="download-poster">Save poster image</button>
-                <p class="hint">
-                    They are saved to Downloads named after this scene; Publish Scene picks them up
-                    with Publish edits. The poster is the picture on the portfolio page: frame a good
-                    view first.
-                </p>
-                <button class="quiet" id="reset-draft">Start over from the uploaded files</button>
+
+                <!-- Story: keyframes the camera glides through as a page scrolls -->
+                <section class="pane" role="tabpanel" id="pane-story" aria-labelledby="tab-story" hidden>
+                    <div class="group">
+                        <h2>Scroll story</h2>
+                        <p class="hint">
+                            Each keyframe is one stop: as visitors scroll, the camera glides from one to
+                            the next and its caption shows. Frame a view, then add it.
+                        </p>
+                        <button id="add-keyframe" class="primary">Add this view as a keyframe</button>
+                        <ol id="keyframes" class="keyframes"></ol>
+                        <p class="hint" id="story-empty">No keyframes yet. Two or more make a path.</p>
+                    </div>
+                    <div class="group" id="story-tools">
+                        <h2>Try it</h2>
+                        <label for="story-scrub">Move along the path</label>
+                        <input id="story-scrub" type="range" min="0" max="1" step="0.01" value="0" />
+                        <div class="field">
+                            <label for="story-smooth">Path</label>
+                            <select id="story-smooth">
+                                <option value="1">Smooth curves</option>
+                                <option value="0.5">Gentle</option>
+                                <option value="0">Straight lines</option>
+                            </select>
+                        </div>
+                        <button id="preview-story">Preview the scrolling page</button>
+                        <p class="hint">Opens the story page in a new tab with these keyframes, before you save.</p>
+                    </div>
+                </section>
+
+                <!-- Notes: annotations -->
+                <section class="pane" role="tabpanel" id="pane-notes" aria-labelledby="tab-notes" hidden>
+                    <div class="group">
+                        <h2>Annotations</h2>
+                        <p class="hint">Points visitors can click to fly to a view and read a note.</p>
+                        <button id="place">Place an annotation…</button>
+                        <form id="annotation-form" hidden>
+                            <p class="hint">
+                                Move to where visitors should see it from. Saving keeps your position and
+                                aims the view at the marker.
+                            </p>
+                            <label for="ann-title">Title</label>
+                            <input id="ann-title" required maxlength="80" />
+                            <label for="ann-text">Text</label>
+                            <textarea id="ann-text" rows="3" maxlength="600"></textarea>
+                            <div class="row">
+                                <button type="submit">Save annotation</button>
+                                <button type="button" class="quiet" id="ann-cancel">Cancel</button>
+                            </div>
+                        </form>
+                        <ol id="annotations" class="list"></ol>
+                    </div>
+                </section>
+            </div>
+
+            <footer class="actions">
                 <p id="status" role="status"></p>
-            </section>
+                <div class="row">
+                    <button id="preview" aria-pressed="false">Try as a visitor</button>
+                    <button id="save-files" class="primary">Save files</button>
+                </div>
+                <p class="hint">
+                    Saves to Downloads for Publish Scene. The site changes only when you publish.
+                    <button class="link" id="reset-draft">Start over</button>
+                </p>
+            </footer>
         </aside>
         <script type="module" src="./edit.js"></script>
     </body>
