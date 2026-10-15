@@ -523,30 +523,12 @@ em {
     max-width: 42rem;
     margin: 32px 0 0;
 }
-.steps-list {
-    list-style: none;
-    margin: clamp(48px, 7vw, 96px) 0 0;
-    padding: 0;
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: clamp(24px, 3vw, 48px);
-}
-.steps-list li {
-    border-top: 1px solid var(--ink);
+/* the one practical line under the story: how a scene reaches people */
+.about-note {
+    margin: clamp(28px, 4vw, 44px) 0 0;
     padding-top: 18px;
-}
-.steps-list .num {
-    font-size: 13px;
-    color: var(--muted);
-    letter-spacing: 0.1em;
-}
-.steps-list h3 {
-    font: 500 1.5rem/1.2 var(--head);
-    letter-spacing: -0.02em;
-    margin: 10px 0 10px;
-}
-.steps-list p {
-    margin: 0;
+    border-top: 1px solid var(--line);
+    max-width: 42rem;
     color: var(--muted);
 }
 
@@ -646,9 +628,6 @@ em {
     .frames li {
         flex: none;
         width: var(--cw);
-    }
-    .steps-list {
-        grid-template-columns: 1fr;
     }
 }
 @media (prefers-reduced-motion: reduce) {
