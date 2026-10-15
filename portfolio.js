@@ -199,13 +199,12 @@ const smooth01 = (x) => {
 const lerp = (a, b, t) => a + (b - a) * t;
 
 // Between the opening screen and the story, while the splat downloads: how the scene was made,
-// in three frames pinned in the window. A photograph from the shoot (flicking through several
-// as the page scrolls), the splat's points, and the finished render from the story's first
-// view. That last frame then opens to fill the window, and the live splat, at the same view,
+// in three frames pinned in the window. A photograph from the shoot, as a print, the splat's
+// points, and the finished render from the story's first view. That last frame then opens to fill the window, and the live splat, at the same view,
 // takes over from it once loaded. portfolio.json's "process" names the folder holding the
-// pictures (photo-1.webp to photo-N.webp, points.webp, render.webp, the last two square, at
-// the first keyframe's pose and fov), how many photos, and the words under the frames;
-// "{count}" in them becomes the splat's size.
+// pictures (photo.webp, points.webp, render.webp, the last two square, at the first
+// keyframe's pose and fov) and the words under the frames; "{count}" in them becomes the
+// splat's size.
 const PROCESS_STEPS = [
     { title: 'Capture', text: 'Hundreds of photographs, taken on site' },
     { title: 'Reconstruct', text: '{count} points of light' },
@@ -225,10 +224,6 @@ const picture = (src) => {
 
 const makingSection = (process, count) => {
     const base = process.folder;
-    const photos = Array.from({ length: Math.max(1, Math.min(24, process.photos | 0)) }, (_, i) =>
-        picture(`${base}/photo-${i + 1}.webp`)
-    );
-    photos[0].className = 'on';
     const step = el('section', 'step making');
     step.dataset.time = '0';
     const pin = el('div', 'making-pin');
@@ -241,8 +236,8 @@ const makingSection = (process, count) => {
     PROCESS_STEPS.forEach((fallback, i) => {
         const words = { ...fallback, ...(process.steps?.[i] ?? {}) };
         const item = el('li');
-        const shot = el('div', i === 2 ? 'shot window' : 'shot');
-        if (i === 0) shot.append(...photos);
+        const shot = el('div', ['shot print', 'shot', 'shot window'][i]);
+        if (i === 0) shot.append(picture(`${base}/photo.webp`));
         if (i === 1) shot.append(picture(`${base}/points.webp`));
         const label = el('div', 'frame-label');
         label.append(
@@ -260,7 +255,7 @@ const makingSection = (process, count) => {
     pin.append(strip);
     step.append(pin);
     $('#hero-render img').src = `${base}/render.webp`;
-    return { step, pin, strip, items, shots, labels, photos, line };
+    return { step, pin, strip, items, shots, labels, line };
 };
 
 // The splat count of a scene published as SOG (its meta.json says), else null.
@@ -285,7 +280,7 @@ const offsetIn = (node, root) => {
 // The making-of's choreography, all from the scroll. Returns two calls: progress(share) for
 // the download line, and live() once the splat can take over from the render.
 const playMaking = (making, withVideo) => {
-    const { step, pin, strip, items, shots, labels, photos, line } = making;
+    const { step, pin, strip, items, shots, labels, line } = making;
     const veil = $('#hero-veil');
     const shade = $('.hero-shade');
     const layer = $('#hero-render');
@@ -303,32 +298,25 @@ const playMaking = (making, withVideo) => {
     });
     measure();
     let ready = false;
-    let photo = 0;
     scrollTasks.push((y, height) => {
         const box = section();
         const top = box.top - y; // the section's top in the window
         const p = (y - box.top) / Math.max(1, box.height - height); // 0 as it pins, 1 as it lets go
         const pinTop = top > 0 ? top : Math.min(0, top + box.height - height);
         const enter = smooth01(1 - top / height); // 0 below the window, 1 at its top
-        const open = smooth01((p - 0.62) / 0.3); // the last frame opening to fill the window
-        const leave = 1 - smooth01((p - 0.54) / 0.12); // the rest making way for it
+        const open = smooth01((p - 0.58) / 0.28); // the last frame opening to fill the window
+        const leave = 1 - smooth01((p - 0.5) / 0.12); // the rest making way for it
 
         // the frames come in one after another (on phones, the strip slides along them)
         const rise = items.map((_, i) => smooth01((p + 0.15 - (phone ? 0 : 0.1 * i)) / 0.15));
         const pitch = frames.length > 1 ? frames[1].x - frames[0].x : 0;
-        const shift = phone ? -2 * pitch * smooth01((p - 0.02) / 0.5) : 0;
+        const shift = phone ? -2 * pitch * smooth01((p - 0.02) / 0.4) : 0;
         strip.style.transform = `translate3d(${shift}px, 0, 0)`;
         items.forEach((item, i) => {
             item.style.transform = `translate3d(0, ${(1 - rise[i]) * 30}px, 0)`;
             labels[i].style.opacity = String(rise[i] * leave);
             if (i < 2) shots[i].style.opacity = String(rise[i] * leave);
         });
-        const next = Math.floor(Math.max(0, p + 0.2) * 26) % photos.length;
-        if (next !== photo) {
-            photos[photo].className = '';
-            photos[next].className = 'on';
-            photo = next;
-        }
 
         // The render is one picture the size of the window, scaled down and clipped to the
         // last frame, growing back to the whole window as it opens: at the end it is exactly
