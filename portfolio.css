@@ -87,7 +87,7 @@ em {
     text-decoration: none;
 }
 .brand {
-    font: 600 19px/1 var(--head);
+    font: 600 clamp(20px, 1.6vw, 24px) / 1 var(--head);
     letter-spacing: -0.02em;
 }
 .nav nav {

@@ -80,7 +80,7 @@
                 text-decoration: none;
             }
             #home {
-                font: 600 19px/1 var(--serif);
+                font: 600 clamp(20px, 1.6vw, 24px) / 1 var(--serif);
                 letter-spacing: -0.02em;
             }
             .bar a:hover,
@@ -223,6 +223,12 @@
                 $('#message').textContent = text;
                 $('#message').hidden = false;
             };
+
+            // the site's name on the way home, as on the homepage
+            fetch('portfolio.json', { cache: 'no-cache' })
+                .then((r) => (r.ok ? r.json() : null))
+                .then((data) => data?.name && ($('#home').textContent = data.name))
+                .catch(() => {});
 
             // ?draft: the editor's unsaved draft from this browser, for previewing before saving
             const draftSettings = () => {
