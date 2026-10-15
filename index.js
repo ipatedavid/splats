@@ -84113,6 +84113,16 @@ class App extends AppBase {
     }
 }
 
+const get = http.get.bind(http);
+http.get = ((url, options, callback) => {
+    if (typeof options === 'function' || options?.responseType !== 'blob') {
+        return get(url, options, callback);
+    }
+    return get(url, { ...options, responseType: 'arraybuffer' }, ((err, data) => {
+        callback?.(err, err ? data : new Blob([data]));
+    }));
+});
+
 /**
  * Fallback voxel cell size for mesh collision, which doesn't carry the carve
  * metadata itself. Assumes the mesh was generated from a voxel grid at this
