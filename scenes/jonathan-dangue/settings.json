@@ -61,5 +61,54 @@
     }
   ],
   "annotations": [],
-  "startMode": "default"
+  "startMode": "default",
+  "story": {
+    "keyframes": [
+      {
+        "position": [
+          0.9155,
+          1.4832,
+          1.3829
+        ],
+        "target": [
+          -0.3766,
+          1.3868,
+          -0.305
+        ],
+        "fov": 85,
+        "title": "Express your art",
+        "text": "Take hard work built in the physical world and show it to millions on-line."
+      },
+      {
+        "position": [
+          -1.6099,
+          1.8046,
+          0.6047
+        ],
+        "target": [
+          -0.8968,
+          1.6381,
+          -0.0711
+        ],
+        "fov": 85,
+        "title": "Interactive and life-like",
+        "text": "Photorealistic depictions in interactive 3D environments."
+      },
+      {
+        "position": [
+          -0.4108,
+          1.522,
+          1.9606
+        ],
+        "target": [
+          -0.6097,
+          1.4132,
+          0.0068
+        ],
+        "fov": 85,
+        "title": "It was meant to be seen",
+        "text": "All angles carry detail and history. "
+      }
+    ]
+  }
 }
