@@ -1,13 +1,13 @@
-// The portfolio page: everything comes from portfolio.json, which you edit.
+// The portfolio page: everything comes from portfolio.json, which you edit. The hero plays a
+// scene's scroll story: portfolio.json's "hero" scene, else the first listed scene that has
+// one. Each card opens a scene's story when it has one, else the 3D player.
+
+import { sceneFolder } from './scene.js';
+import { storyKeyframes } from './story.js';
 
 const $ = (selector) => document.querySelector(selector);
 const SCENE_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
-
-const text = (selector, value) => {
-    const el = $(selector);
-    el.textContent = value ?? '';
-    el.hidden = !value;
-};
+const folderOf = (name) => sceneFolder(new URLSearchParams({ scene: name }));
 
 const safeLink = (url) => {
     try {
@@ -18,88 +18,157 @@ const safeLink = (url) => {
     }
 };
 
-const card = (entry) => {
-    const item = document.createElement('li');
-    const link = document.createElement('a');
-    link.className = 'card';
-    link.href = `view.html?scene=${encodeURIComponent(entry.scene)}`;
+const el = (tag, className, text) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+};
 
-    const poster = document.createElement('div');
-    poster.className = 'poster';
-    // until (or unless) the poster loads: a soft tile, with "Open in 3D" always showing
-    const placeholder = document.createElement('span');
-    placeholder.className = 'placeholder';
-    poster.classList.add('no-poster');
-    poster.append(placeholder);
+const fetchJson = async (url) => {
+    try {
+        const response = await fetch(url, { cache: 'no-cache' });
+        return response.ok ? await response.json() : null;
+    } catch {
+        return null;
+    }
+};
+
+// A scene's settings (for its story) and its pointer file (for a poster hosted elsewhere).
+const sceneInfo = async (entry) => {
+    const folder = folderOf(entry.scene);
+    const [settings, manifest] = await Promise.all([
+        fetchJson(`${folder.url}settings.json`),
+        fetchJson(`${folder.url}scene.json`)
+    ]);
+    return { entry, folder, settings, keyframes: storyKeyframes(settings?.story), manifest };
+};
+
+// The card picture: the entry's own poster, else the folder's poster.webp, else the poster
+// scene.json points to (a scene published on superspl.at has one).
+const posterCandidates = ({ entry, folder, manifest }) => {
+    const list = [];
+    if (entry.poster) list.push(new URL(entry.poster, location.href).href);
+    list.push(`${folder.url}poster.webp`);
+    const pointed = safeLink(manifest?.poster ?? '');
+    if (pointed?.startsWith('https:')) list.push(pointed);
+    return list;
+};
+
+const card = (info, index) => {
+    const { entry, keyframes } = info;
+    const item = el('li', 'rise');
+    const link = el('a', 'card');
+    const story = keyframes.length > 0;
+    link.href = `${story ? 'story' : 'view'}.html?scene=${encodeURIComponent(entry.scene)}`;
+
+    const frame = el('div', 'frame');
     const img = new Image();
     img.alt = '';
-    img.loading = 'lazy';
     img.decoding = 'async';
-    // The card picture: the entry's own poster, else the folder's poster.webp, else the
-    // poster scene.json points to (a scene published on superspl.at has one).
-    const candidates = entry.poster ? [new URL(entry.poster, location.href).href] : [`scenes/${entry.scene}/poster.webp`];
-    let pointerTried = Boolean(entry.poster);
-    img.addEventListener('load', () => {
-        placeholder.remove();
-        poster.classList.remove('no-poster');
-    });
-    img.addEventListener('error', async () => {
+    if (index > 0) img.loading = 'lazy';
+    const candidates = posterCandidates(info);
+    img.addEventListener('error', () => {
         const next = candidates.shift();
-        if (next) {
-            img.src = next;
-            return;
-        }
-        if (!pointerTried) {
-            pointerTried = true;
-            try {
-                const manifest = await (await fetch(`scenes/${entry.scene}/scene.json`, { cache: 'no-cache' })).json();
-                const url = new URL(manifest.poster, location.href);
-                if (url.protocol === 'https:') {
-                    img.src = url.href;
-                    return;
-                }
-            } catch {
-                // no pointer, or no poster in it
-            }
-        }
-        img.remove();
+        if (next) img.src = next;
+        else img.remove();
     });
     img.src = candidates.shift();
-    poster.append(img);
-    const open = document.createElement('span');
-    open.className = 'open';
-    open.textContent = 'Open in 3D';
-    poster.append(open);
+    frame.append(img, el('span', 'badge', story ? 'Scroll story' : '3D scene'));
 
-    const title = document.createElement('h2');
-    title.textContent = entry.title;
-    link.append(poster, title);
-    const meta = [entry.place, entry.date].filter(Boolean).join(' · ');
-    if (meta) {
-        const p = document.createElement('p');
-        p.className = 'meta';
-        p.textContent = meta;
-        link.append(p);
-    }
-    if (entry.text) {
-        const p = document.createElement('p');
-        p.textContent = entry.text;
-        link.append(p);
-    }
+    const meta = el('div', 'card-meta');
+    const words = el('div');
+    words.append(el('h3', '', entry.title));
+    const where = [entry.place, entry.date].filter(Boolean).join(' · ');
+    if (where) words.append(el('p', 'where', where));
+    const go = el('span', 'go', story ? 'View the story →' : 'Open in 3D →');
+    meta.append(words, go);
+    link.append(frame, meta);
     item.append(link);
     return item;
 };
 
-// `html` is only ever one of the fixed messages below; anything else goes in as text.
-const showEmpty = (html, plain = '') => {
-    const empty = $('#empty');
-    empty.hidden = false;
-    if (html) {
-        empty.innerHTML = html;
-    } else {
-        empty.textContent = plain;
-    }
+// ---- the hero -----------------------------------------------------------------------------
+
+const heroSteps = (keyframes) =>
+    keyframes.map((k, i) => {
+        const step = el('section', 'step');
+        step.dataset.time = String(i);
+        const inner = el('div', 'step-inner');
+        inner.append(el('p', 'count', `${String(i + 1).padStart(2, '0')} / ${String(keyframes.length).padStart(2, '0')}`));
+        if (k.title) inner.append(el('h2', '', k.title));
+        if (k.text) inner.append(el('p', 'caption', k.text));
+        step.append(inner);
+        return step;
+    });
+
+const startHero = async (info) => {
+    const { entry, folder, settings, keyframes } = info;
+    const steps = heroSteps(keyframes);
+    $('#hero-steps').append(...steps);
+    const sections = [...document.querySelectorAll('#hero-steps .step')];
+    const shown = new IntersectionObserver(
+        (entries) => entries.forEach((e) => e.target.classList.toggle('shown', e.isIntersecting)),
+        { rootMargin: '-30% 0px -30% 0px' }
+    );
+    sections.forEach((s) => shown.observe(s));
+
+    $('#hero-title').textContent = [entry.title, entry.place].filter(Boolean).join(' · ');
+    $('#hero-explore').href = `view.html?scene=${encodeURIComponent(entry.scene)}`;
+    $('#hero-credit').hidden = false;
+    const poster = posterCandidates(info)[0];
+    if (poster) $('#hero-poster').style.backgroundImage = `url("${poster}")`;
+
+    // the viewer is big: the words and pictures come first, the splat after
+    const [{ createViewer, defaultSettings }, { loadScene }, { storySettings, bindScroll }] = await Promise.all([
+        import('./index.js'),
+        import('./scene.js'),
+        import('./story.js')
+    ]);
+    const scene = await loadScene(folder, defaultSettings);
+    if (scene.posterUrl) $('#hero-poster').style.backgroundImage = `url("${scene.posterUrl}")`;
+    const viewer = await createViewer({
+        container: $('#hero-canvas'),
+        settings: storySettings(settings, keyframes, settings.story?.smoothness ?? 1),
+        contentUrl: scene.contentUrl,
+        skyboxUrl: scene.skyboxUrl,
+        ui: false,
+        noanim: true,
+        renderer: new URL(location.href).searchParams.has('webgl') ? 'webgl' : 'webgpu'
+    });
+    window.viewer = viewer;
+    viewer.events.on('loaded:changed', (loaded) => loaded && $('#hero-poster').classList.add('gone'));
+    bindScroll(viewer, sections);
 };
+
+// ---- the page -----------------------------------------------------------------------------
+
+const reveal = () => {
+    const seen = new IntersectionObserver(
+        (entries) =>
+            entries.forEach((e) => {
+                if (e.isIntersecting) {
+                    e.target.classList.add('in');
+                    seen.unobserve(e.target);
+                }
+            }),
+        { rootMargin: '0px 0px -10% 0px' }
+    );
+    document.querySelectorAll('.rise').forEach((node) => seen.observe(node));
+};
+
+const intro = $('#hero-steps .intro');
+new IntersectionObserver((entries) => entries.forEach((e) => intro.classList.toggle('shown', e.isIntersecting)), {
+    rootMargin: '-20% 0px -20% 0px'
+}).observe(intro);
+// the menu turns into a paper bar once the page has scrolled up under it
+const onScroll = () => {
+    $('#scroll-cue').classList.toggle('gone', scrollY > 40);
+    $('.nav').classList.toggle('on-paper', $('.page').getBoundingClientRect().top <= $('.nav').offsetHeight);
+};
+addEventListener('scroll', onScroll, { passive: true });
+onScroll();
+for (const node of document.querySelectorAll('.section-head, .about > *, .contact > *')) node.classList.add('rise');
 
 try {
     const response = await fetch('portfolio.json', { cache: 'no-cache' });
@@ -107,34 +176,44 @@ try {
         throw new Error(`portfolio.json answered ${response.status}`);
     }
     const data = await response.json();
-    if (data.name) {
-        document.title = data.name;
-    }
-    text('#name', data.name || 'Splats');
-    text('#tagline', data.tagline);
-    text('#intro', data.intro);
+    const name = data.name || 'Portfolio';
+    document.title = data.tagline ? `${name} · ${data.tagline}` : name;
+    $('#brand').textContent = name;
+    $('#foot-name').textContent = `© ${new Date().getFullYear()} ${name}`;
+    if (data.tagline) $('#tagline').textContent = data.tagline;
+    $('#name-line').textContent = data.lede ?? `${name} captures real places and objects in 3D.`;
+    $('#intro').textContent = data.intro ?? '';
+    $('#intro').hidden = !data.intro;
+
     const links = $('#links');
-    for (const { label, url } of data.links ?? []) {
+    (data.links ?? []).forEach(({ label, url }, i) => {
         const href = safeLink(url);
-        if (label && href) {
-            const a = document.createElement('a');
-            a.href = href;
-            a.textContent = label;
-            if (href.startsWith('https:')) {
-                a.rel = 'noopener';
-            }
-            links.append(a);
+        if (!label || !href) return;
+        const a = el('a', i === 0 ? 'pill main' : 'pill', label);
+        a.href = href;
+        if (href.startsWith('mailto:')) {
+            a.textContent = `${label} · ${href.slice(7)}`;
+        } else {
+            a.rel = 'noopener';
         }
+        links.append(a);
+    });
+
+    const entries = (data.scenes ?? []).filter((s) => s && SCENE_NAME.test(s.scene ?? '') && s.title);
+    const infos = await Promise.all(entries.map(sceneInfo));
+    $('#scenes').append(...infos.map(card));
+    if (!infos.length) {
+        $('#empty').hidden = false;
+        $('#empty').textContent = 'No scenes listed yet.';
     }
-    links.hidden = !links.children.length;
-    const scenes = (data.scenes ?? []).filter((s) => s && SCENE_NAME.test(s.scene ?? '') && s.title);
-    $('#scenes').append(...scenes.map(card));
-    if (!scenes.length) {
-        showEmpty(
-            'No scenes listed yet. Add one to <code>portfolio.json</code> with its folder name and a ' +
-                'title, and put its files in <code>scenes/&lt;name&gt;/</code>.'
-        );
+    reveal();
+
+    const hero = infos.find((i) => i.entry.scene === data.hero && i.keyframes.length) ?? infos.find((i) => i.keyframes.length);
+    if (hero) {
+        await startHero(hero);
     }
 } catch (error) {
-    showEmpty('', `The scene list could not be loaded (${error.message}).`);
+    reveal();
+    $('#empty').hidden = false;
+    $('#empty').textContent = `The scene list could not be loaded (${error.message}).`;
 }

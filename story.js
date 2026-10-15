@@ -74,40 +74,45 @@ export const storySettings = (settings, keyframes, smoothness) => ({
     annotations: []
 });
 
+// The story time a section stands for: its data-time, else its place in the list. Two sections
+// with the same time hold the camera still while the page scrolls between them.
+const sectionTimes = (sections) => sections.map((s, i) => (s.dataset.time !== undefined ? Number(s.dataset.time) : i));
+
 /**
- * Where the story is for the page's scroll position: 0 at the first section's middle, 1 at the
- * second's, and so on, held at both ends.
+ * Where the story is for the page's scroll position: each section's time at its middle, eased
+ * in between, held at both ends.
  */
-const storyTime = (sections) => {
+const storyTime = (sections, times) => {
     const middle = window.scrollY + window.innerHeight / 2;
     const centres = sections.map((s) => {
         const box = s.getBoundingClientRect();
         return box.top + window.scrollY + box.height / 2;
     });
-    if (middle <= centres[0]) return 0;
+    if (middle <= centres[0]) return times[0];
     for (let i = 0; i < centres.length - 1; i++) {
         if (middle < centres[i + 1]) {
-            return i + (middle - centres[i]) / (centres[i + 1] - centres[i]);
+            return times[i] + ((times[i + 1] - times[i]) * (middle - centres[i])) / (centres[i + 1] - centres[i]);
         }
     }
-    return centres.length - 1;
+    return times[times.length - 1];
 };
 
 /**
- * Ties a viewer playing a story track to the scroll position of `sections` (one per keyframe).
- * The camera eases after the scroll, so a flick of the wheel becomes a glide. Returns a stop
- * function.
+ * Ties a viewer playing a story track to the scroll position of `sections` (one per keyframe,
+ * or as their data-time says). The camera eases after the scroll, so a flick of the wheel
+ * becomes a glide. Returns a stop function.
  */
 export const bindScroll = (viewer, sections, { ease = 5 } = {}) => {
-    const last = Math.max(1, sections.length - 1);
-    let shown = storyTime(sections);
+    const times = sectionTimes(sections);
+    const last = Math.max(1, ...times);
+    let shown = storyTime(sections, times);
     let ready = false;
     let frame = 0;
     let before = performance.now();
     const tick = (now) => {
         const dt = Math.min(0.1, (now - before) / 1000);
         before = now;
-        const wanted = Math.min(storyTime(sections), last);
+        const wanted = Math.min(storyTime(sections, times), last);
         shown += (wanted - shown) * (1 - Math.exp(-dt * ease));
         if (Math.abs(wanted - shown) < 1e-4) shown = wanted;
         if (ready) {

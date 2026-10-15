@@ -4,6 +4,12 @@
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
         <title>Story</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            rel="stylesheet"
+            href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Hanken+Grotesk:wght@400;500;600&display=swap"
+        />
         <link rel="stylesheet" href="./index.css" />
         <script src="./config.js"></script>
         <style>
@@ -13,7 +19,8 @@
                 --ink: #f4f1ec;
                 --muted: rgba(244, 241, 236, 0.72);
                 --glass: rgba(14, 14, 16, 0.5);
-                --display: 'Helvetica Neue', Helvetica, Arial, system-ui, sans-serif;
+                --serif: 'Instrument Serif', 'Iowan Old Style', Georgia, serif;
+                --display: 'Hanken Grotesk', 'Helvetica Neue', Arial, system-ui, sans-serif;
                 color-scheme: dark;
             }
             html {
@@ -66,6 +73,9 @@
                 color: var(--ink);
                 text-decoration: none;
             }
+            #home {
+                font: 400 24px/1 var(--serif);
+            }
             .bar a:hover,
             .bar a:focus-visible {
                 text-decoration: underline;
@@ -113,10 +123,8 @@
                 font-variant-numeric: tabular-nums;
             }
             .card h2 {
-                font-size: clamp(2.2rem, 5.5vw, 4.4rem);
-                line-height: 1.02;
-                letter-spacing: -0.02em;
-                font-weight: 500;
+                font: 400 clamp(2.6rem, 6vw, 5.2rem) / 0.98 var(--serif);
+                letter-spacing: -0.015em;
                 margin: 0 0 18px;
                 text-wrap: balance;
             }

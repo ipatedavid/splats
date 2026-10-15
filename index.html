@@ -3,7 +3,7 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-        <title>Splats</title>
+        <title>Portfolio</title>
         <script>
             // Old links went to index.html?scene=…; the player is view.html now.
             if (new URLSearchParams(location.search).has('scene')) {
@@ -14,30 +14,89 @@
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
         <link
             rel="stylesheet"
-            href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap"
+            href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Hanken+Grotesk:wght@400;500;600&display=swap"
         />
+        <link rel="stylesheet" href="./index.css" />
         <link rel="stylesheet" href="./portfolio.css" />
+        <script src="./config.js"></script>
     </head>
     <body>
-        <div class="wrap">
-            <header class="mast">
-                <p class="eyebrow">Gaussian splats · walk inside them</p>
-                <h1 id="name">Splats</h1>
-                <p id="tagline" class="tagline"></p>
-                <p id="intro" class="intro"></p>
-                <nav id="links" class="links" aria-label="Links"></nav>
-            </header>
-            <main>
-                <ul id="scenes" class="grid" aria-label="Scenes"></ul>
+        <header class="nav">
+            <a href="#top" class="brand" id="brand">Portfolio</a>
+            <nav aria-label="Sections">
+                <a href="#work">Work</a>
+                <a href="#about">About</a>
+                <a href="#contact">Contact</a>
+            </nav>
+        </header>
+
+        <!-- The hero: a scene's scroll story behind the opening lines. The splat stays put
+             (sticky) while the captions scroll over it, then the page carries on over it. -->
+        <section class="hero" id="top" aria-label="Introduction">
+            <div class="hero-stage">
+                <div class="hero-poster" id="hero-poster" aria-hidden="true"></div>
+                <div class="hero-canvas" id="hero-canvas" aria-hidden="true"></div>
+                <div class="hero-shade" aria-hidden="true"></div>
+                <div class="hero-credit" id="hero-credit" hidden>
+                    <span id="hero-title"></span>
+                    <a id="hero-explore" href="#">Explore in 3D <span aria-hidden="true">→</span></a>
+                </div>
+            </div>
+            <div class="hero-steps" id="hero-steps">
+                <section class="step intro" data-time="0">
+                    <div class="step-inner">
+                        <h1 class="display" id="tagline">Let's virtualise life.</h1>
+                        <p class="lede" id="name-line"></p>
+                    </div>
+                </section>
+            </div>
+            <div class="scroll-cue" id="scroll-cue" aria-hidden="true">Scroll</div>
+        </section>
+
+        <main class="page">
+            <section class="work" id="work" aria-labelledby="work-title">
+                <div class="section-head">
+                    <p class="kicker">Selected work</p>
+                    <h2 class="section-title" id="work-title">Places and objects, <em>as they are</em></h2>
+                </div>
+                <ul class="cards" id="scenes" aria-label="Scenes"></ul>
                 <p id="empty" class="empty" hidden></p>
-            </main>
-            <footer>
-                <p>
-                    Captured with a camera, turned into splats on rented GPUs, shown with the open-source
-                    SuperSplat viewer. Drag to look around; on a phone, use one finger to turn and two to zoom.
-                </p>
-            </footer>
-        </div>
+            </section>
+
+            <section class="about" id="about" aria-labelledby="about-title">
+                <p class="kicker">About</p>
+                <h2 class="section-title" id="about-title">Photographed on site, <em>walkable</em> in any browser.</h2>
+                <p class="about-text" id="intro"></p>
+                <ol class="steps-list">
+                    <li>
+                        <span class="num">01</span>
+                        <h3>Capture</h3>
+                        <p>Hundreds of photographs, taken where the work stands, from every angle that matters.</p>
+                    </li>
+                    <li>
+                        <span class="num">02</span>
+                        <h3>Reconstruct</h3>
+                        <p>The photographs become a gaussian splat: millions of points of light that hold real colour and detail.</p>
+                    </li>
+                    <li>
+                        <span class="num">03</span>
+                        <h3>Share</h3>
+                        <p>One link opens it on any phone or computer, and it can sit inside your own website.</p>
+                    </li>
+                </ol>
+            </section>
+
+            <section class="contact" id="contact" aria-labelledby="contact-title">
+                <p class="kicker">Contact</p>
+                <h2 class="contact-title" id="contact-title">Let's capture <em>something</em>.</h2>
+                <div class="contact-actions" id="links"></div>
+            </section>
+        </main>
+
+        <footer class="foot">
+            <span id="foot-name"></span>
+            <a href="#top">Back to top <span aria-hidden="true">↑</span></a>
+        </footer>
         <script type="module" src="./portfolio.js"></script>
     </body>
 </html>
