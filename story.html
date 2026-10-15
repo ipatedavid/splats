@@ -108,8 +108,12 @@
             .card {
                 max-width: 30rem;
                 opacity: 0;
-                transform: translateY(24px);
-                transition: opacity 0.8s ease, transform 0.8s ease;
+                transform: translateY(16px);
+                transition: opacity 0.55s ease, transform 0.55s ease;
+            }
+            html.lenis,
+            html.lenis body {
+                height: auto;
             }
             .step.shown .card {
                 opacity: 1;
@@ -198,6 +202,8 @@
         <div class="hint" id="hint">Scroll</div>
         <div id="progress"></div>
         <p id="message" hidden></p>
+        <!-- smooth scrolling (MIT), so the words and the splat glide together -->
+        <script src="https://cdn.jsdelivr.net/npm/lenis@1.1.13/dist/lenis.min.js"></script>
         <script type="module">
             import { createViewer, defaultSettings } from './index.js';
             import { sceneFolder, loadScene } from './scene.js';
@@ -269,7 +275,7 @@
 
                         const shown = new IntersectionObserver(
                             (entries) => entries.forEach((e) => e.target.classList.toggle('shown', e.isIntersecting)),
-                            { rootMargin: '-35% 0px -35% 0px' }
+                            { rootMargin: '-15% 0px -15% 0px' }
                         );
                         steps.forEach((s) => shown.observe(s));
 
@@ -284,7 +290,19 @@
                         });
                         window.viewer = viewer;
                         viewer.events.on('loaded:changed', (loaded) => loaded && $('#poster').classList.add('gone'));
-                        bindScroll(viewer, steps);
+                        // Smooth scrolling on desktop; touch keeps the phone's own. Off for
+                        // visitors who ask for less motion, or if the library didn't load.
+                        const smooth = window.Lenis && !matchMedia('(prefers-reduced-motion: reduce)').matches
+                            ? new window.Lenis({ lerp: 0.1 })
+                            : null;
+                        if (smooth) {
+                            const raf = (time) => {
+                                smooth.raf(time);
+                                requestAnimationFrame(raf);
+                            };
+                            requestAnimationFrame(raf);
+                        }
+                        bindScroll(viewer, steps, { ease: smooth ? 14 : 6 });
 
                         const onScroll = () => {
                             const max = document.documentElement.scrollHeight - innerHeight;

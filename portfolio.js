@@ -109,7 +109,7 @@ const startHero = async (info) => {
     const sections = [...document.querySelectorAll('#hero-steps .step')];
     const shown = new IntersectionObserver(
         (entries) => entries.forEach((e) => e.target.classList.toggle('shown', e.isIntersecting)),
-        { rootMargin: '-30% 0px -30% 0px' }
+        { rootMargin: '-15% 0px -15% 0px' }
     );
     sections.forEach((s) => shown.observe(s));
 
@@ -138,7 +138,8 @@ const startHero = async (info) => {
     });
     window.viewer = viewer;
     viewer.events.on('loaded:changed', (loaded) => loaded && $('#hero-poster').classList.add('gone'));
-    bindScroll(viewer, sections);
+    // with smooth scrolling the page already glides, so the camera follows it closely
+    bindScroll(viewer, sections, { ease: smooth ? 14 : 6 });
 };
 
 // ---- the page -----------------------------------------------------------------------------
@@ -152,10 +153,38 @@ const reveal = () => {
                     seen.unobserve(e.target);
                 }
             }),
-        { rootMargin: '0px 0px -10% 0px' }
+        // start a little before they come into view, so nothing is still blank on arrival
+        { rootMargin: '0px 0px 12% 0px' }
     );
     document.querySelectorAll('.rise').forEach((node) => seen.observe(node));
 };
+
+// Smooth scrolling on desktop (wheel and trackpad); touch keeps the phone's own scrolling.
+// Off for visitors who ask for less motion, or if the library didn't load.
+const smooth = window.Lenis && !matchMedia('(prefers-reduced-motion: reduce)').matches
+    ? new window.Lenis({ lerp: 0.1 })
+    : null;
+if (smooth) {
+    const raf = (time) => {
+        smooth.raf(time);
+        requestAnimationFrame(raf);
+    };
+    requestAnimationFrame(raf);
+}
+// the menu's links glide too, and land below the menu bar
+document.addEventListener('click', (event) => {
+    const link = event.target.closest('a[href^="#"]');
+    const target = link && (link.getAttribute('href') === '#top' ? 0 : document.querySelector(link.getAttribute('href')));
+    if (target === null || target === undefined) return;
+    event.preventDefault();
+    const offset = target === 0 ? 0 : -$('.nav').offsetHeight + 1;
+    if (smooth) {
+        smooth.scrollTo(target, { offset, duration: 1.4 });
+    } else {
+        const top = target === 0 ? 0 : target.getBoundingClientRect().top + scrollY + offset;
+        scrollTo({ top, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    }
+});
 
 const intro = $('#hero-steps .intro');
 new IntersectionObserver((entries) => entries.forEach((e) => intro.classList.toggle('shown', e.isIntersecting)), {
