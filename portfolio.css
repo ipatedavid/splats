@@ -12,8 +12,8 @@
     --night: #0e0d0c;
     --on-night: #f5f1ea;
     --on-night-muted: rgba(245, 241, 234, 0.88);
-    /* lifts words off a moving picture: a tight edge plus a wide soft glow */
-    --lift: 0 1px 2px rgba(8, 7, 6, 0.4), 0 2px 18px rgba(8, 7, 6, 0.38), 0 8px 48px rgba(8, 7, 6, 0.3);
+    /* lifts words off a moving picture; one light shadow, cheap to redraw as captions fade */
+    --lift: 0 1px 10px rgba(8, 7, 6, 0.5);
     --serif: 'Instrument Serif', 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
     --sans: 'Hanken Grotesk', 'Helvetica Neue', Arial, system-ui, sans-serif;
     --gutter: clamp(16px, 5vw, 72px);
@@ -107,8 +107,9 @@ em {
 .hero-stage {
     position: sticky;
     top: 0;
+    /* the tallest the window gets (phone toolbars hidden), so no strip shows under it */
     height: 100vh;
-    height: 100svh;
+    height: 100lvh;
     overflow: hidden;
     pointer-events: none;
 }
@@ -232,7 +233,7 @@ em {
 .hero-steps {
     position: relative;
     margin-top: -100vh;
-    margin-top: -100svh;
+    margin-top: -100lvh;
 }
 .step {
     min-height: 100vh;

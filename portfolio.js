@@ -34,6 +34,41 @@ const fetchJson = async (url) => {
     }
 };
 
+// ---- page geometry and the scroll loop ------------------------------------------------------
+
+// Where things are on the page, measured once and again whenever sizes change. Scrolling then
+// only does arithmetic: measuring during a scroll makes the browser redo its layout each time.
+const geometry = new Map(); // element -> { top, height } in page coordinates
+const measure = () => {
+    for (const node of geometry.keys()) {
+        const box = node.getBoundingClientRect();
+        geometry.set(node, { top: box.top + scrollY, height: box.height });
+    }
+    runScroll();
+};
+const sizes = new ResizeObserver(() => measure());
+sizes.observe(document.body);
+addEventListener('resize', measure);
+const track = (node) => {
+    geometry.set(node, { top: 0, height: 1 });
+    measure();
+    return () => geometry.get(node);
+};
+
+// Everything that follows the scroll runs here, once per frame at most.
+const scrollTasks = [];
+let scrollQueued = false;
+const runScroll = () => {
+    scrollQueued = false;
+    for (const task of scrollTasks) task(scrollY, innerHeight);
+};
+addEventListener('scroll', () => {
+    if (!scrollQueued) {
+        scrollQueued = true;
+        requestAnimationFrame(runScroll);
+    }
+}, { passive: true });
+
 // A scene's settings (for its story) and its pointer file (for a poster hosted elsewhere).
 const sceneInfo = async (entry) => {
     const folder = folderOf(entry.scene);
@@ -145,6 +180,14 @@ const firstMove = () =>
         kinds.forEach((k) => addEventListener(k, done, { passive: true }));
     });
 
+// Resolves once the video has been playing for `ms`.
+const playedFor = (video, ms) =>
+    new Promise((resolve) => {
+        const start = () => setTimeout(resolve, ms);
+        if (!video.paused && video.readyState > 2) start();
+        else video.addEventListener('playing', start, { once: true });
+    });
+
 // ---- the interlude ------------------------------------------------------------------------
 
 const smooth01 = (x) => {
@@ -222,16 +265,16 @@ const startHero = async (info, statement) => {
     const veil = $('#hero-veil');
     veil.hidden = false;
     const withVideo = !$('#hero-video').hidden;
-    const intro = $('#hero-steps .intro');
-    const fadeVeil = () => {
-        const top = intro.getBoundingClientRect();
-        const comeIn = withVideo ? 1 : smooth01((-top.top / top.height - 0.2) / 0.6);
-        const box = interlude.getBoundingClientRect();
-        const passed = (innerHeight - box.top) / (box.height + innerHeight); // 0 entering, 1 gone
+    const intro = track($('#hero-steps .intro'));
+    const between = track(interlude);
+    scrollTasks.push((y, height) => {
+        const top = intro();
+        const comeIn = withVideo ? 1 : smooth01(((y - top.top) / top.height - 0.2) / 0.6);
+        const box = between();
+        const passed = (height - (box.top - y)) / (box.height + height); // 0 entering, 1 gone
         veil.style.opacity = String(comeIn * (1 - smooth01((passed - 0.62) / 0.28)));
-    };
-    addEventListener('scroll', fadeVeil, { passive: true });
-    fadeVeil();
+    });
+    runScroll();
     const sections = [...document.querySelectorAll('#hero-steps .step')];
     const shown = new IntersectionObserver(
         (entries) => entries.forEach((e) => e.target.classList.toggle('shown', e.isIntersecting)),
@@ -247,11 +290,15 @@ const startHero = async (info, statement) => {
         return;
     }
 
-    // Only one of the video and the splat works at a time: the video plays alone on the first
-    // screen, and the splat starts loading once the visitor starts to move on (the story is a
-    // screen's scroll away; the scene's picture stands in until it is ready). With a video
-    // the visitor's first move is waited for; without one the splat loads straight away.
-    if (!$('#hero-video').hidden) await firstMove();
+    // The splat's heavy start (its code, the 3D context, unpacking tens of MB) is best done while
+    // the visitor is watching rather than scrolling: a dropped video frame goes unnoticed, a
+    // stalled swipe does not. So it starts a few seconds into the video, or at the first
+    // scroll if that comes sooner (or after 8 s if the video never plays). Without a video it
+    // starts straight away.
+    const video = $('#hero-video');
+    if (!video.hidden) {
+        await Promise.race([playedFor(video, 3000), firstMove(), new Promise((r) => setTimeout(r, 8000))]);
+    }
     renderAtOneX($('#hero-canvas'));
     const [{ createViewer, defaultSettings }, { loadScene }, { storySettings, bindScroll }] = await Promise.all([
         import('./index.js'),
@@ -297,6 +344,7 @@ const startVideo = (base) => {
     // best first; a file that's missing or won't play falls through to the next
     const files = phone ? ['portrait', '720', '1080'] : av1 ? ['1440-av1', '1080'] : ['1080'];
     video.addEventListener('error', () => {
+        if (unloaded) return;
         files.shift();
         if (files.length) {
             video.src = `${base}-${files[0]}.mp4`;
@@ -307,20 +355,46 @@ const startVideo = (base) => {
     video.hidden = false;
     if (!still) video.play().catch(() => {});
 
-    const intro = $('#hero-steps .intro');
-    const fade = () => {
-        const box = intro.getBoundingClientRect();
-        const gone = Math.min(1, Math.max(0, -box.top / box.height)); // 0 at the top, 1 once scrolled past
-        const t = Math.min(1, Math.max(0, (gone - 0.2) / 0.6));
-        const opacity = 1 - t * t * (3 - 2 * t);
-        video.style.opacity = String(opacity);
+    // Once it has dissolved, the video is unloaded altogether, freeing its decoder and frames
+    // for the splat; scrolling back up loads it again where it left off.
+    let unloaded = false;
+    let unloadTimer = 0;
+    let resumeAt = 0;
+    const unload = () => {
+        unloadTimer = 0;
+        resumeAt = video.currentTime;
+        unloaded = true;
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+        video.hidden = true;
+    };
+    const reload = () => {
+        unloaded = false;
+        video.hidden = false;
+        video.src = `${base}-${files[0]}.mp4`;
+        video.addEventListener('loadedmetadata', () => (video.currentTime = resumeAt), { once: true });
+    };
+
+    const intro = track($('#hero-steps .intro'));
+    scrollTasks.push((y) => {
+        const box = intro();
+        const gone = (y - box.top) / box.height; // 0 at the top, 1 once scrolled past
+        const opacity = 1 - smooth01((gone - 0.2) / 0.6);
         // Only one of the two at work: the video freezes on its frame as soon as it starts to
         // dissolve into the splat, and plays again once it fills the screen.
+        if (opacity > 0) {
+            clearTimeout(unloadTimer);
+            unloadTimer = 0;
+            if (unloaded) reload();
+        } else if (!unloaded && !unloadTimer) {
+            unloadTimer = setTimeout(unload, 1500);
+        }
+        video.style.opacity = String(opacity);
         if (opacity < 1 && !video.paused) video.pause();
         else if (opacity === 1 && video.paused && !still) video.play().catch(() => {});
-    };
-    addEventListener('scroll', fade, { passive: true });
-    fade();
+    });
+    runScroll();
 };
 
 // ---- the page -----------------------------------------------------------------------------
@@ -372,12 +446,15 @@ new IntersectionObserver((entries) => entries.forEach((e) => intro.classList.tog
     rootMargin: '-20% 0px -20% 0px'
 }).observe(intro);
 // the menu turns into a paper bar once the page has scrolled up under it
-const onScroll = () => {
-    $('#scroll-cue').classList.toggle('gone', scrollY > 40);
-    $('.nav').classList.toggle('on-paper', $('.page').getBoundingClientRect().top <= $('.nav').offsetHeight);
-};
-addEventListener('scroll', onScroll, { passive: true });
-onScroll();
+const paper = track($('.page'));
+const nav = $('.nav');
+const cue = $('#scroll-cue');
+const navHeight = nav.offsetHeight;
+scrollTasks.push((y) => {
+    cue.classList.toggle('gone', y > 40);
+    nav.classList.toggle('on-paper', paper().top - y <= navHeight);
+});
+runScroll();
 for (const node of document.querySelectorAll('.section-head, .about > *, .contact > *')) node.classList.add('rise');
 
 try {

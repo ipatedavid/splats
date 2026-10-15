@@ -78,16 +78,20 @@ export const storySettings = (settings, keyframes, smoothness) => ({
 // with the same time hold the camera still while the page scrolls between them.
 const sectionTimes = (sections) => sections.map((s, i) => (s.dataset.time !== undefined ? Number(s.dataset.time) : i));
 
+// Each section's middle in page coordinates. Measured once and again when sizes change, not
+// every frame: measuring makes the browser redo its layout.
+const sectionCentres = (sections) =>
+    sections.map((s) => {
+        const box = s.getBoundingClientRect();
+        return box.top + window.scrollY + box.height / 2;
+    });
+
 /**
  * Where the story is for the page's scroll position: each section's time at its middle, eased
  * in between, held at both ends.
  */
-const storyTime = (sections, times) => {
+const storyTime = (centres, times) => {
     const middle = window.scrollY + window.innerHeight / 2;
-    const centres = sections.map((s) => {
-        const box = s.getBoundingClientRect();
-        return box.top + window.scrollY + box.height / 2;
-    });
     if (middle <= centres[0]) return times[0];
     for (let i = 0; i < centres.length - 1; i++) {
         if (middle < centres[i + 1]) {
@@ -105,14 +109,22 @@ const storyTime = (sections, times) => {
 export const bindScroll = (viewer, sections, { ease = 5 } = {}) => {
     const times = sectionTimes(sections);
     const last = Math.max(1, ...times);
-    let shown = storyTime(sections, times);
+    let centres = sectionCentres(sections);
+    const remeasure = () => {
+        centres = sectionCentres(sections);
+    };
+    const sizes = new ResizeObserver(remeasure);
+    sizes.observe(document.body);
+    sections.forEach((s) => sizes.observe(s));
+    addEventListener('resize', remeasure);
+    let shown = storyTime(centres, times);
     let ready = false;
     let frame = 0;
     let before = performance.now();
     const tick = (now) => {
         const dt = Math.min(0.1, (now - before) / 1000);
         before = now;
-        const wanted = Math.min(storyTime(sections, times), last);
+        const wanted = Math.min(storyTime(centres, times), last);
         shown += (wanted - shown) * (1 - Math.exp(-dt * ease));
         if (Math.abs(wanted - shown) < 1e-4) shown = wanted;
         if (ready) {
@@ -132,6 +144,8 @@ export const bindScroll = (viewer, sections, { ease = 5 } = {}) => {
     frame = requestAnimationFrame(tick);
     return () => {
         cancelAnimationFrame(frame);
+        sizes.disconnect();
+        removeEventListener('resize', remeasure);
         viewer.events.off?.('loaded:changed', onLoaded);
     };
 };
