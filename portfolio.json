@@ -12,6 +12,12 @@
   ],
   "scenes": [
     {
+      "scene": "maa-li",
+      "title": "Maa'li",
+      "place": "National Museum of Natural History Manila",
+      "date": "October 2026"
+    },
+    {
       "scene": "my-mindanao-by-ann-tiukinhow-pamintuan",
       "title": "My Mindanao by Ann Tiukinhow Pamintuan",
       "place": "Ayala Malls Manila Bay",
