@@ -1,118 +1,118 @@
 {
- "version": 2,
- "tonemapping": "none",
- "highPrecisionRendering": false,
- "background": {
-  "color": [
-   0,
-   0,
-   0
-  ]
- },
- "postEffectSettings": {
-  "sharpness": {
-   "enabled": false,
-   "amount": 0
+  "version": 2,
+  "tonemapping": "none",
+  "highPrecisionRendering": false,
+  "background": {
+    "color": [
+      0,
+      0,
+      0
+    ]
   },
-  "bloom": {
-   "enabled": false,
-   "intensity": 0.1,
-   "blurLevel": 2
-  },
-  "grading": {
-   "enabled": false,
-   "brightness": 1,
-   "contrast": 1,
-   "saturation": 1,
-   "tint": [
-    1,
-    1,
-    1
-   ]
-  },
-  "vignette": {
-   "enabled": false,
-   "intensity": 0.5,
-   "inner": 0.3,
-   "outer": 0.75,
-   "curvature": 1
-  },
-  "fringing": {
-   "enabled": false,
-   "intensity": 0.5
-  }
- },
- "animTracks": [
-  {
-   "name": "animTrack",
-   "duration": 15,
-   "frameRate": 30,
-   "loopMode": "repeat",
-   "interpolation": "spline",
-   "smoothness": 1,
-   "keyframes": {
-    "times": [
-     10,
-     103,
-     229,
-     347
-    ],
-    "values": {
-     "position": [
-      2.25920033454895,
-      1.8371518850326538,
-      -3.235499143600464,
-      1.7489646673202515,
-      2.370173454284668,
-      1.1927151679992676,
-      -4.357349395751953,
-      0.9571855068206787,
-      3.2611351013183594,
-      3.102567434310913,
-      1.2963032722473145,
-      1.9755991697311401
-     ],
-     "target": [
-      0.28658673383383126,
-      1.9453924660820305,
-      -1.5669720871358321,
-      0.4832044260637547,
-      2.579935317467072,
-      0.17789767691096525,
-      -1.3634755194985324,
-      2.1247643358060757,
-      -0.35311966601614,
-      -1.507333202181493,
-      2.162087760631918,
-      -0.4221411301750999
-     ],
-     "fov": [
-      85,
-      85,
-      85,
-      85
-     ]
+  "postEffectSettings": {
+    "sharpness": {
+      "enabled": false,
+      "amount": 0
+    },
+    "bloom": {
+      "enabled": false,
+      "intensity": 0.1,
+      "blurLevel": 2
+    },
+    "grading": {
+      "enabled": false,
+      "brightness": 1,
+      "contrast": 1,
+      "saturation": 1,
+      "tint": [
+        1,
+        1,
+        1
+      ]
+    },
+    "vignette": {
+      "enabled": false,
+      "intensity": 0.5,
+      "inner": 0.3,
+      "outer": 0.75,
+      "curvature": 1
+    },
+    "fringing": {
+      "enabled": false,
+      "intensity": 0.5
     }
-   }
-  }
- ],
- "cameras": [
-  {
-   "initial": {
-    "position": [
-     2.9972763061523438,
-     2.770678758621216,
-     2.035595655441284
-    ],
-    "target": [
-     0.8511269880508765,
-     2.116762634095963,
-     0.0355673037707791
-    ],
-    "fov": 85
-   }
-  }
- ],
- "annotations": [],
- "startMode": "animTrack"
+  },
+  "animTracks": [
+    {
+      "name": "animTrack",
+      "duration": 15,
+      "frameRate": 30,
+      "loopMode": "repeat",
+      "interpolation": "spline",
+      "smoothness": 1,
+      "keyframes": {
+        "times": [
+          10,
+          103,
+          229,
+          347
+        ],
+        "values": {
+          "position": [
+            2.25920033454895,
+            1.8371518850326538,
+            -3.235499143600464,
+            1.7489646673202515,
+            2.370173454284668,
+            1.1927151679992676,
+            -4.357349395751953,
+            0.9571855068206787,
+            3.2611351013183594,
+            3.102567434310913,
+            1.2963032722473145,
+            1.9755991697311401
+          ],
+          "target": [
+            0.28658673383383126,
+            1.9453924660820305,
+            -1.5669720871358321,
+            0.4832044260637547,
+            2.579935317467072,
+            0.17789767691096525,
+            -1.3634755194985324,
+            2.1247643358060757,
+            -0.35311966601614,
+            -1.507333202181493,
+            2.162087760631918,
+            -0.4221411301750999
+          ],
+          "fov": [
+            85,
+            85,
+            85,
+            85
+          ]
+        }
+      }
+    }
+  ],
+  "cameras": [
+    {
+      "initial": {
+        "position": [
+          2.9972763061523438,
+          2.770678758621216,
+          2.035595655441284
+        ],
+        "target": [
+          0.8511269880508765,
+          2.116762634095963,
+          0.0355673037707791
+        ],
+        "fov": 85
+      }
+    }
+  ],
+  "annotations": [],
+  "startMode": "animTrack"
 }

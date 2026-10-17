@@ -1,0 +1,28 @@
+{
+  "mode": "orbit",
+  "orbit": {
+    "target": [
+      -1.181,
+      2.243,
+      0.6
+    ],
+    "targetPan": 1
+  },
+  "preset": "object",
+  "collision": {
+    "orbit": true,
+    "fly": true
+  },
+  "edge": "normal",
+  "walk": {
+    "walls": [
+      [
+        3.472,
+        -0.55,
+        3.699,
+        -4.1,
+        0.1
+      ]
+    ]
+  }
+}
